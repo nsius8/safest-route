@@ -1,0 +1,11 @@
+# Render Blueprint (optional). You can also set build/start in the Render dashboard.
+services:
+  - type: web
+    name: safest-route
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: npx tsx server/index.ts
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Add in Render dashboard: PORT (set by Render), OPENROUTESERVICE_API_KEY, ALERT_HISTORY_CSV_URL, etc.

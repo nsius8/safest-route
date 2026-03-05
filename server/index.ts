@@ -1,4 +1,7 @@
 import 'dotenv/config'
+import path from 'path'
+import { existsSync } from 'fs'
+import { fileURLToPath } from 'url'
 import express from 'express'
 import cors from 'cors'
 import {
@@ -11,6 +14,7 @@ import {
 import { registerRouteRoutes, getActiveAlertZones, getZoneInfo } from './routeService'
 import { registerShelterRoutes } from './shelterService'
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
 const PORT = process.env.PORT ?? 3001
 
@@ -95,6 +99,17 @@ registerShelterRoutes(app)
 startLiveAlertPolling(
   process.env.OREF_PROXY ? { proxy: process.env.OREF_PROXY } : undefined
 )
+
+// Production (e.g. Render): serve Vite build and SPA fallback when dist exists
+const distPath = path.join(__dirname, '..', 'dist')
+if (existsSync(distPath)) {
+  app.use(express.static(distPath))
+  app.get('*', (_req, res, next) => {
+    res.sendFile(path.join(distPath, 'index.html'), (err) => {
+      if (err) next()
+    })
+  })
+}
 
 app.listen(PORT, () => {
   console.log(`Server listening on http://localhost:${PORT}`)
