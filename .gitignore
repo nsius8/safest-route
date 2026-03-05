@@ -1,5 +1,7 @@
 # Dependencies
 node_modules/
+# Lockfile may point at company registry; Render uses NPM_CONFIG_REGISTRY env var instead
+package-lock.json
 
 # Render: build output is created on deploy; env vars set in Render dashboard (do not commit .env)
 
