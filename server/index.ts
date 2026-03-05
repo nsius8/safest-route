@@ -8,6 +8,7 @@ import {
   getActiveAlertSync,
   subscribeToAlerts,
   startLiveAlertPolling,
+  pushAlert,
   getHeatmapData,
   fetchAndCacheHistory,
 } from './alertService'
@@ -30,6 +31,38 @@ app.get('/health', (_req, res) => {
 app.get('/api/alerts/active', (_req, res) => {
   const alert = getActiveAlertSync()
   res.json(alert ?? { type: 'none', cities: [] })
+})
+
+// Push alert from a local machine (e.g. in Israel) that polls OREF. Requires ALERT_PUSH_SECRET.
+app.post('/api/alerts/push', (req, res) => {
+  const secret = process.env.ALERT_PUSH_SECRET
+  if (!secret || secret.length < 16) {
+    res.status(501).json({ error: 'Alert push not configured (set ALERT_PUSH_SECRET on server)' })
+    return
+  }
+  const auth = req.headers.authorization
+  const token = typeof auth === 'string' && auth.startsWith('Bearer ') ? auth.slice(7) : req.headers['x-alert-push-secret']
+  if (token !== secret) {
+    res.status(401).json({ error: 'Invalid or missing secret' })
+    return
+  }
+  const body = req.body
+  if (!body || typeof body !== 'object') {
+    res.status(400).json({ error: 'Expected JSON body' })
+    return
+  }
+  if (body.type === 'none' || !body.cities || !Array.isArray(body.cities) || body.cities.length === 0) {
+    pushAlert(null)
+    res.json({ ok: true, alert: null })
+    return
+  }
+  const alert = {
+    type: String(body.type || 'missiles'),
+    cities: body.cities.map((c: unknown) => String(c)),
+    instructions: body.instructions != null ? String(body.instructions) : undefined,
+  }
+  pushAlert(alert)
+  res.json({ ok: true, alert })
 })
 
 // REST: alert history – invoked on site load with ?lang=he|en; fetches OREF/CSV, missile-only. Cached for HISTORY_CACHE_TTL_MS. Returns summary only (countByLocation, maxAlerts) for speed; full history is kept server-side for heatmap/safety.
@@ -95,10 +128,14 @@ app.get('/events/alerts', (req, res) => {
 registerRouteRoutes(app)
 registerShelterRoutes(app)
 
-// Start OREF polling (optional proxy via env: OREF_PROXY=http://user:pass@host:port/)
-startLiveAlertPolling(
-  process.env.OREF_PROXY ? { proxy: process.env.OREF_PROXY } : undefined
-)
+// Start OREF polling only if not using push-from-local (optional proxy via env: OREF_PROXY)
+if (!process.env.ALERT_PUSH_SECRET) {
+  startLiveAlertPolling(
+    process.env.OREF_PROXY ? { proxy: process.env.OREF_PROXY } : undefined
+  )
+} else {
+  console.log('Alert push mode: server expects alerts from local pusher (OREF not polled here)')
+}
 
 // Production (e.g. Render): serve Vite build and SPA fallback when dist exists
 const distPath = path.join(__dirname, '..', 'dist')

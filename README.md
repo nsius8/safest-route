@@ -12,7 +12,7 @@ Built with **React**, **Leaflet** (OpenStreetMap), **OpenRouteService** for rout
 
 - Node.js 18+
 - **OpenRouteService API key** (free at [openrouteservice.org](https://openrouteservice.org)) – required for routing and geocoding
-- OREF APIs are only reachable from Israel (or use `OREF_PROXY` for a proxy)
+- OREF APIs are only reachable from Israel. Options: **proxy** (`OREF_PROXY`), or **push from a machine in Israel** (see below)
 
 ## Setup
 
@@ -29,7 +29,22 @@ OPENROUTESERVICE_API_KEY=your_key_here
 OREF_PROXY=http://user:pass@host:port/   # only if outside Israel
 # Long-term history (OREF returns only a short window):
 # ALERT_HISTORY_CSV_URL=https://raw.githubusercontent.com/dleshem/israel-alerts-data/main/israel-alerts.csv
+
+# Optional: push alerts from a machine in Israel (no proxy). Set same secret on Render.
+# PUSH_URL=https://safest-route.onrender.com
+# ALERT_PUSH_SECRET=your-long-secret-min-16-chars
 ```
+
+**Push from a machine in Israel (e.g. your home):** Run the OREF pusher on a computer that has Israeli IP. It polls OREF and POSTs updates to your Render app so the site gets live alerts without a proxy or port forwarding.
+
+```bash
+# On the machine in Israel, set in .env or export:
+# PUSH_URL=https://safest-route.onrender.com
+# ALERT_PUSH_SECRET=<same secret as on Render, min 16 chars>
+npm run pusher
+```
+
+On Render, set env var `ALERT_PUSH_SECRET` (same value). The server will then accept pushes and will not poll OREF itself.
 
 ## Run
 

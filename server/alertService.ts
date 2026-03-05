@@ -66,6 +66,11 @@ function notifyListeners(alert: ActiveAlertPayload | null) {
   alertListeners.forEach((l) => l(alert))
 }
 
+/** Set current alert from an external push (e.g. from a machine in Israel). Notifies SSE listeners. */
+export function pushAlert(alert: ActiveAlertPayload | null): void {
+  notifyListeners(alert)
+}
+
 /**
  * Poll OREF live alerts. Call once to start; runs every POLL_INTERVAL_MS.
  */

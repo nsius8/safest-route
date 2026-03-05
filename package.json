@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "server": "tsx watch server/index.ts",
     "start": "concurrently \"npm run server\" \"npm run dev\"",
-    "start:prod": "npx tsx server/index.ts"
+    "start:prod": "npx tsx server/index.ts",
+    "pusher": "npx tsx scripts/oref-pusher.ts"
   },
   "dependencies": {
     "tsx": "^4.19.2",
