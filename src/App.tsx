@@ -70,6 +70,8 @@ function App() {
   const [zoneLocationName, setZoneLocationName] = useState<string | null>(null)
   const [zoneLocationNameEn, setZoneLocationNameEn] = useState<string | null>(null)
   const countdownEndsAtRef = useRef<number | null>(null)
+  /** Once countdown reaches 0, don't restart for the same stay-in-zone; reset when user leaves zone or alert clears. */
+  const countdownAlreadyCompletedRef = useRef(false)
 
   // Refetch safety + zones when language, route, score mode or (when by-time) selected time changes
   useEffect(() => {
@@ -128,6 +130,7 @@ function App() {
       setZoneLocationName(null)
       setZoneLocationNameEn(null)
       countdownEndsAtRef.current = null
+      countdownAlreadyCompletedRef.current = false
       return
     }
     api
@@ -138,18 +141,23 @@ function App() {
         setInDangerZone(data.inZone)
         setZoneLocationName(data.locationName ?? null)
         setZoneLocationNameEn(data.locationNameEn ?? null)
+        if (!data.inZone) {
+          countdownEndsAtRef.current = null
+          setCountdown(null)
+          countdownAlreadyCompletedRef.current = false
+          return
+        }
         const showCountdown =
-          data.inZone &&
           (alert.type === 'missiles' || alert.type === 'hostileAircraftIntrusion') &&
           typeof data.countdown === 'number' &&
           data.countdown > 0
-        if (showCountdown) {
+        if (showCountdown && !countdownAlreadyCompletedRef.current) {
           const countdownSec = data.countdown ?? COUNTDOWN_DEFAULT
           if (countdownEndsAtRef.current == null || countdownEndsAtRef.current < Date.now()) {
             countdownEndsAtRef.current = Date.now() + countdownSec * 1000
             setCountdown(countdownSec)
           }
-        } else {
+        } else if (!showCountdown) {
           countdownEndsAtRef.current = null
           setCountdown(null)
         }
@@ -160,6 +168,7 @@ function App() {
         setZoneLocationName(null)
         setZoneLocationNameEn(null)
         countdownEndsAtRef.current = null
+        countdownAlreadyCompletedRef.current = false
       })
   }, [alert, myPosition])
 
@@ -168,6 +177,9 @@ function App() {
     const tick = () => {
       const now = Date.now()
       if (countdownEndsAtRef.current == null || now >= countdownEndsAtRef.current) {
+        if (countdownEndsAtRef.current != null && now >= countdownEndsAtRef.current) {
+          countdownAlreadyCompletedRef.current = true
+        }
         setCountdown(null)
         countdownEndsAtRef.current = null
         return
