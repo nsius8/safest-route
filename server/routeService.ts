@@ -15,6 +15,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const ORS_BASE = 'https://api.openrouteservice.org'
 const ORS_API_KEY = process.env.OPENROUTESERVICE_API_KEY || ''
+const NOMINATIM_BASE = 'https://nominatim.openstreetmap.org'
+const NOMINATIM_UA = 'SafestRoute/1.0 (https://github.com/nsius8/safest-route)'
+// Local/dev: allow more suggest results and higher ORS size for testing
+const SUGGEST_MAX_LIMIT = process.env.NODE_ENV === 'production' ? 25 : 100
+const ORS_SUGGEST_SIZE_CAP = process.env.NODE_ENV === 'production' ? 20 : 50
 
 interface CityRecord {
   id: number
@@ -439,10 +444,36 @@ function computeRouteSafetyScore(
   return Math.round(Math.max(5, Math.min(100, score)))
 }
 
-/** Geocode: first try bundled Israeli cities, then ORS if API key set. */
+/** Geocode via Nominatim (OSM). Returns [lat, lng] or null. */
+async function geocodeNominatim(query: string): Promise<[number, number] | null> {
+  if (!query.trim()) return null
+  try {
+    const { data } = await axios.get<Array<{ lat: string; lon: string }>>(
+      `${NOMINATIM_BASE}/search`,
+      {
+        params: { q: query.trim(), format: 'json', countrycodes: 'il', limit: 1 },
+        headers: { 'User-Agent': NOMINATIM_UA },
+        timeout: 8000,
+      }
+    )
+    const r = Array.isArray(data) ? data[0] : null
+    if (!r) return null
+    const lat = parseFloat(r.lat)
+    const lng = parseFloat(r.lon)
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
+    return [lat, lng]
+  } catch (_) {
+    return null
+  }
+}
+
+/** Geocode: bundled cities first, then Nominatim, then ORS fallback. */
 async function geocode(query: string): Promise<[number, number] | null> {
   const fromCities = geocodeFromCities(query)
   if (fromCities) return fromCities
+
+  const fromNominatim = await geocodeNominatim(query)
+  if (fromNominatim) return fromNominatim
 
   if (!ORS_API_KEY) return null
   try {
@@ -578,6 +609,46 @@ function suggestCities(query: string, limit = 15): Array<{ name: string; name_en
   return out
 }
 
+/** Suggest places via Nominatim (OSM). Returns same shape as suggestCities. User-Agent required; 1 req/s on public instance. */
+async function suggestPlacesNominatim(
+  query: string,
+  limit = 15
+): Promise<Array<{ name: string; name_en?: string; lat: number; lng: number }>> {
+  if (!query.trim() || query.trim().length < 2) return []
+  try {
+    const { data } = await axios.get<Array<{ lat: string; lon: string; display_name?: string }>>(
+      `${NOMINATIM_BASE}/search`,
+      {
+        params: {
+          q: query.trim(),
+          format: 'json',
+          countrycodes: 'il',
+          limit: Math.min(limit, 50),
+        },
+        headers: { 'User-Agent': NOMINATIM_UA },
+        timeout: 8000,
+      }
+    )
+    const out: Array<{ name: string; name_en?: string; lat: number; lng: number }> = []
+    const seen = new Set<string>()
+    for (const r of data ?? []) {
+      const lat = parseFloat(r.lat)
+      const lng = parseFloat(r.lon)
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue
+      const key = `${lat.toFixed(5)},${lng.toFixed(5)}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      const label = (r.display_name || '').trim() || undefined
+      if (!label) continue
+      out.push({ name: label, name_en: label, lat, lng })
+      if (out.length >= limit) break
+    }
+    return out
+  } catch (_) {
+    return []
+  }
+}
+
 /** Suggest places (streets, addresses) via ORS geocode. Returns same shape as suggestCities. */
 async function suggestPlacesORS(
   query: string,
@@ -591,7 +662,7 @@ async function suggestPlacesORS(
         params: {
           text: query.trim(),
           'boundary.country': 'IL',
-          size: Math.min(limit, 20),
+          size: Math.min(limit, ORS_SUGGEST_SIZE_CAP),
         },
         headers: { Authorization: ORS_API_KEY },
         timeout: 8000,
@@ -623,15 +694,13 @@ export function registerRouteRoutes(app: Express): void {
   app.get('/api/cities/suggest', async (req, res) => {
     try {
       const q = (req.query.q as string)?.trim() || ''
-      const limit = Math.min(25, Math.max(5, parseInt(String(req.query.limit), 10) || 15))
+      const limit = Math.min(SUGGEST_MAX_LIMIT, Math.max(5, parseInt(String(req.query.limit), 10) || 15))
       const lang = (req.query.lang as string) === 'he' ? 'he' : 'en'
       const toLabel = (s: { name: string; name_en?: string }) =>
         lang === 'he' ? (s.name || s.name_en || '') : (s.name_en || s.name || '')
-      // Prefer ORS (addresses/streets) when query looks like an address: has a number or multiple words
-      const looksLikeAddress = /\d/.test(q) || q.split(/\s+/).length >= 2 || q.length > 12
       const cityList = suggestCities(q, limit)
-      const orsLimit = Math.min(limit, looksLikeAddress ? 20 : Math.max(0, limit - cityList.length))
-      const orsList = orsLimit > 0 ? await suggestPlacesORS(q, orsLimit) : []
+      const nominatimLimit = Math.min(limit, 50)
+      const nominatimList = await suggestPlacesNominatim(q, nominatimLimit)
       const seen = new Set<string>()
       const suggestions: Array<{ label: string; lat: number; lng: number }> = []
       const add = (s: { name: string; name_en?: string; lat: number; lng: number }) => {
@@ -641,14 +710,10 @@ export function registerRouteRoutes(app: Express): void {
           suggestions.push({ label: toLabel(s), lat: s.lat, lng: s.lng })
         }
       }
-      if (looksLikeAddress && orsList.length > 0) {
-        orsList.forEach(add)
-        cityList.forEach(add)
-      } else {
-        cityList.forEach(add)
-        orsList.forEach(add)
-      }
-      res.json({ suggestions })
+      // OSM (Nominatim) only for suggestions, then bundled cities; dedupe by coords
+      nominatimList.forEach(add)
+      cityList.forEach(add)
+      res.json({ suggestions: suggestions.slice(0, limit) })
     } catch (e) {
       res.status(500).json({ suggestions: [] })
     }
