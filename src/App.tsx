@@ -51,7 +51,7 @@ function App() {
     api.get('/alerts/history', { params: { lang: historyLang } }).catch(() => {})
   }, [lang])
 
-  const [showHeatmap, setShowHeatmap] = useState(false)
+  const [showSheltersOnMap, setShowSheltersOnMap] = useState(false)
   const [scoreMode, setScoreMode] = useState<'overall' | 'byTime'>('byTime')
   const [selectedTime, setSelectedTime] = useState(() => {
     const d = new Date()
@@ -200,6 +200,32 @@ function App() {
     setShelters(list)
   }, [])
 
+  // When "show nearby shelters" is on, fetch and show shelters on map; when off, clear them
+  useEffect(() => {
+    if (!showSheltersOnMap) {
+      setShelters([])
+      return
+    }
+    if (!myPosition) return
+    api
+      .get<{ shelters: Array<{ id: string; lat: number; lon: number; name?: string; distance: number }> }>(
+        '/shelters/nearby',
+        { params: { lat: myPosition.lat, lon: myPosition.lng, radius: 2000 } }
+      )
+      .then(({ data }) => {
+        setShelters(
+          (data.shelters || []).map((s) => ({
+            id: s.id,
+            lat: s.lat,
+            lon: s.lon,
+            name: s.name,
+            distance: s.distance,
+          }))
+        )
+      })
+      .catch(() => setShelters([]))
+  }, [showSheltersOnMap, myPosition?.lat, myPosition?.lng])
+
   useEffect(() => {
     if (!route?.segments?.[0]?.coordinates?.length) {
       setRouteShelters([])
@@ -233,7 +259,7 @@ function App() {
           shelters={route ? routeShelters : shelters}
           zonesAlongRoute={zonesVisible ? zonesAlongRoute : []}
           userPosition={myPosition}
-          showHeatmap={showHeatmap}
+          showHeatmap={false}
           lang={lang}
         />
       </div>
@@ -322,7 +348,7 @@ function App() {
             </label>
           )}
         </div>
-        <Legend showHeatmap={showHeatmap} onToggleHeatmap={() => setShowHeatmap((v) => !v)} />
+        <Legend showSheltersOnMap={showSheltersOnMap} onToggleShowShelters={() => setShowSheltersOnMap((v) => !v)} />
       </div>
       <ShelterModal
         open={shelterModalOpen}

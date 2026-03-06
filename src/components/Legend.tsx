@@ -1,22 +1,22 @@
 import { t } from '../i18n'
 
 interface LegendProps {
-  showHeatmap?: boolean
-  onToggleHeatmap?: () => void
+  showSheltersOnMap?: boolean
+  onToggleShowShelters?: () => void
 }
 
-export function Legend({ showHeatmap = false, onToggleHeatmap }: LegendProps) {
+export function Legend({ showSheltersOnMap = false, onToggleShowShelters }: LegendProps) {
   return (
     <div className="legend" aria-label="Map legend">
-      {onToggleHeatmap && (
+      {onToggleShowShelters && (
         <label className="legend__item legend__item--toggle">
           <input
             type="checkbox"
-            checked={showHeatmap}
-            onChange={onToggleHeatmap}
-            aria-label={t('showHeatmap')}
+            checked={showSheltersOnMap}
+            onChange={onToggleShowShelters}
+            aria-label={t('showShelters')}
           />
-          <span>{t('showHeatmap')}</span>
+          <span>{t('showShelters')}</span>
         </label>
       )}
       <div className="legend__item">
