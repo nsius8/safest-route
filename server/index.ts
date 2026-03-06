@@ -11,6 +11,7 @@ import {
   pushAlert,
   getHeatmapData,
   fetchAndCacheHistory,
+  invalidateHistoryCache,
 } from './alertService'
 import { registerRouteRoutes, getActiveAlertZones, getZoneInfo } from './routeService'
 import { registerShelterRoutes } from './shelterService'
@@ -148,6 +149,41 @@ if (existsSync(distPath)) {
   })
 }
 
+const IL_TZ = 'Asia/Jerusalem'
+
+function getIsraelDateKey(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: IL_TZ })
+}
+
+function getIsraelHour(): number {
+  const hourStr = new Date().toLocaleTimeString('en-GB', {
+    timeZone: IL_TZ,
+    hour: '2-digit',
+    hour12: false,
+  })
+  return parseInt(hourStr, 10) || 0
+}
+
+function scheduleDailyHistoryRefresh(): void {
+  let lastRunDate = ''
+  const check = async () => {
+    const hour = getIsraelHour()
+    const today = getIsraelDateKey()
+    if (hour === 0 && today !== lastRunDate) {
+      lastRunDate = today
+      invalidateHistoryCache()
+      try {
+        await fetchAndCacheHistory('he')
+        console.log('Alert history cache refreshed (daily 00:00 IL)')
+      } catch (e) {
+        console.warn('Daily alert history refresh failed:', (e as Error)?.message ?? e)
+      }
+    }
+  }
+  setInterval(check, 60 * 60 * 1000)
+  check().catch(() => {})
+}
+
 app.listen(PORT, () => {
   console.log(`Server listening on http://localhost:${PORT}`)
   // Prewarm alert history cache so first page load is fast
@@ -155,4 +191,5 @@ app.listen(PORT, () => {
     () => console.log('Alert history cache prewarmed'),
     (e) => console.warn('Alert history prewarm failed:', (e as Error)?.message ?? e)
   )
+  scheduleDailyHistoryRefresh()
 })

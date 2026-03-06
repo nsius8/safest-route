@@ -325,6 +325,11 @@ export async function fetchAndCacheHistory(lang: HistoryLang): Promise<{
   }
 }
 
+/** Force the next fetchAndCacheHistory to refetch (e.g. for daily refresh). */
+export function invalidateHistoryCache(): void {
+  historyCacheTime = 0
+}
+
 /** Returns cached history (missile-only). Empty until fetchAndCacheHistory(lang) is called (e.g. on site load). */
 export async function getAlertHistory(): Promise<AlertHistoryEntryPayload[]> {
   return historyCache
