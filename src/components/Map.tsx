@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { MapContainer, TileLayer, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -28,7 +29,7 @@ function RouteLayer({ route }: { route: SafeRoute | null }) {
     const poly = L.polyline(latlngs, { color: '#3498db', weight: 5 })
     poly.addTo(map)
     layerRef.current = poly
-    map.fitBounds(poly.getBounds(), { padding: [40, 40] })
+    map.fitBounds(poly.getBounds(), { padding: [80, 80] })
     return () => {
       if (layerRef.current) {
         layerRef.current.remove()
@@ -157,6 +158,19 @@ interface MapProps {
   children?: React.ReactNode
 }
 
+function ZoomControlPortal() {
+  const map = useMap()
+  const mount = typeof document !== 'undefined' ? document.getElementById('zoom-control-mount') : null
+  if (!mount) return null
+  return createPortal(
+    <div className="app__zoom-buttons" role="group" aria-label="Map zoom">
+      <button type="button" onClick={() => map.zoomIn()} aria-label="Zoom in">+</button>
+      <button type="button" onClick={() => map.zoomOut()} aria-label="Zoom out">−</button>
+    </div>,
+    mount
+  )
+}
+
 export function Map({ activeAlert, route, shelters, zonesAlongRoute, userPosition, showHeatmap = false, lang = 'he', children }: MapProps) {
   return (
     <div className="map-wrapper">
@@ -164,9 +178,10 @@ export function Map({ activeAlert, route, shelters, zonesAlongRoute, userPositio
         center={ISRAEL_CENTER}
         zoom={DEFAULT_ZOOM}
         className="map-container"
-        zoomControl={true}
+        zoomControl={false}
         scrollWheelZoom={true}
       >
+        <ZoomControlPortal />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"

@@ -65,6 +65,7 @@ function App() {
   const [routeShelters, setRouteShelters] = useState<Shelter[]>([])
   const [shelters, setShelters] = useState<Shelter[]>([])
   const [shelterModalOpen, setShelterModalOpen] = useState(false)
+  const [mobilePanelExpanded, setMobilePanelExpanded] = useState(true)
   const [inDangerZone, setInDangerZone] = useState(false)
   const [countdown, setCountdown] = useState<number | null>(null)
   const [zoneLocationName, setZoneLocationName] = useState<string | null>(null)
@@ -225,6 +226,17 @@ function App() {
 
   return (
     <div className="app">
+      <div className="app__map-wrap">
+        <Map
+          activeAlert={!!alert}
+          route={route}
+          shelters={route ? routeShelters : shelters}
+          zonesAlongRoute={zonesVisible ? zonesAlongRoute : []}
+          userPosition={myPosition}
+          showHeatmap={showHeatmap}
+          lang={lang}
+        />
+      </div>
       <header className="app__header">
         <h1 className="app__title">{t('appTitle')}</h1>
         <div className="app__lang">
@@ -239,74 +251,78 @@ function App() {
           </button>
           <button
             type="button"
-className={lang === 'he' ? 'active' : ''}
-          onClick={() => setLang('he')}
-          aria-pressed={lang === 'he'}
-          aria-label="עברית"
+            className={lang === 'he' ? 'active' : ''}
+            onClick={() => setLang('he')}
+            aria-pressed={lang === 'he'}
+            aria-label="עברית"
           >
             עברית
           </button>
         </div>
       </header>
-      <AlertBanner
-        alert={alert}
-        inDangerZone={inDangerZone}
-        countdownSeconds={countdown}
-        currentLocationName={lang === 'he' ? zoneLocationName : (zoneLocationNameEn || zoneLocationName)}
-        onShowShelters={showShelters}
-      />
-      <div className="app__main">
-        <Map
-          activeAlert={!!alert}
-          route={route}
-          shelters={route ? routeShelters : shelters}
-          zonesAlongRoute={zonesVisible ? zonesAlongRoute : []}
-          userPosition={myPosition}
-          showHeatmap={showHeatmap}
-          lang={lang}
+      <div id="zoom-control-mount" className="app__zoom-wrap" />
+      <div className="app__alert-wrap">
+        <AlertBanner
+          alert={alert}
+          inDangerZone={inDangerZone}
+          countdownSeconds={countdown}
+          currentLocationName={lang === 'he' ? zoneLocationName : (zoneLocationNameEn || zoneLocationName)}
+          onShowShelters={showShelters}
         />
-        <div className="app__panel">
-          <RoutePanel
-            onRouteFound={handleRouteFound}
-            onUseMyLocation={handleUseMyLocation}
-            onToggleZonesVisibility={toggleZonesVisibility}
-            myPosition={myPosition}
-            liveRouteSafety={routeSafety}
-          />
-          <div className="score-mode">
-            <span className="score-mode__label">{t('zoneScore')}</span>
-            <div className="score-mode__toggle" role="group" aria-label={t('zoneScore')}>
-              <button
-                type="button"
-                className={scoreMode === 'overall' ? 'active' : ''}
-                onClick={() => setScoreMode('overall')}
-                aria-pressed={scoreMode === 'overall'}
-              >
-                {t('scoreOverall')}
-              </button>
-              <button
-                type="button"
-                className={scoreMode === 'byTime' ? 'active' : ''}
-                onClick={() => setScoreMode('byTime')}
-                aria-pressed={scoreMode === 'byTime'}
-              >
-                {t('scoreByTime')}
-              </button>
-            </div>
-            {scoreMode === 'byTime' && (
-              <label className="score-mode__time">
-                <input
-                  type="time"
-                  value={selectedTime}
-                  onChange={(e) => setSelectedTime(roundToHalfHour(e.target.value))}
-                  step={1800}
-                  aria-label={t('scoreTimeLabel')}
-                />
-              </label>
-            )}
+      </div>
+      <div className={`app__panel ${!mobilePanelExpanded ? 'app__panel--collapsed' : ''}`}>
+        <button
+          type="button"
+          className="app__panel-handle"
+          onClick={() => setMobilePanelExpanded((v) => !v)}
+          aria-expanded={mobilePanelExpanded}
+          aria-label={mobilePanelExpanded ? t('panelCollapse') : t('panelExpand')}
+        >
+          <span className="app__panel-handle-bar" aria-hidden />
+          <span className="app__panel-handle-icon" aria-hidden>
+            {mobilePanelExpanded ? '⌄' : '⌃'}
+          </span>
+        </button>
+        <RoutePanel
+          onRouteFound={handleRouteFound}
+          onUseMyLocation={handleUseMyLocation}
+          onToggleZonesVisibility={toggleZonesVisibility}
+          myPosition={myPosition}
+          liveRouteSafety={routeSafety}
+        />
+        <div className="score-mode">
+          <span className="score-mode__label">{t('zoneScore')}</span>
+          <div className="score-mode__toggle" role="group" aria-label={t('zoneScore')}>
+            <button
+              type="button"
+              className={scoreMode === 'overall' ? 'active' : ''}
+              onClick={() => setScoreMode('overall')}
+              aria-pressed={scoreMode === 'overall'}
+            >
+              {t('scoreOverall')}
+            </button>
+            <button
+              type="button"
+              className={scoreMode === 'byTime' ? 'active' : ''}
+              onClick={() => setScoreMode('byTime')}
+              aria-pressed={scoreMode === 'byTime'}
+            >
+              {t('scoreByTime')}
+            </button>
           </div>
-          <Legend showHeatmap={showHeatmap} onToggleHeatmap={() => setShowHeatmap((v) => !v)} />
+          {scoreMode === 'byTime' && (
+            <label className="score-mode__time">
+              <input
+                type="time"
+                value={selectedTime}
+                onChange={(e) => setSelectedTime(roundToHalfHour(e.target.value))}
+                step={1800}
+                aria-label={t('scoreTimeLabel')}
+              />
+            </label>
+          )}
         </div>
+        <Legend showHeatmap={showHeatmap} onToggleHeatmap={() => setShowHeatmap((v) => !v)} />
       </div>
       <ShelterModal
         open={shelterModalOpen}

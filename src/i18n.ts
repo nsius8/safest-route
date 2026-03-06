@@ -33,6 +33,8 @@ const strings: Record<Lang, Record<string, string>> = {
     otherLocations: 'other locations',
     alertIn: 'Alert in',
     locations: 'locations',
+    panelExpand: 'Show route panel',
+    panelCollapse: 'Hide route panel',
   },
   he: {
     appTitle: 'המסלול הבטוח',
@@ -66,6 +68,8 @@ const strings: Record<Lang, Record<string, string>> = {
     otherLocations: 'אזורים נוספים',
     alertIn: 'התראה ב',
     locations: 'אזורים',
+    panelExpand: 'הצג פאנל מסלול',
+    panelCollapse: 'הסתר פאנל',
   },
 }
 
