@@ -1,26 +1,38 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import type { ActiveAlert } from '../types'
+import type { ActiveAlert, ActiveAlertResponse } from '../types'
 import api from '../services/api'
 
 export function useAlerts() {
   const [alert, setAlert] = useState<ActiveAlert | null>(null)
+  /** When active, list of alerts by type (for expandable banner and map colors) */
+  const [alertsList, setAlertsList] = useState<ActiveAlert[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [alertUpdatedAt, setAlertUpdatedAt] = useState(0)
   const sseRef = useRef<EventSource | null>(null)
 
-  const setAlertFromPayload = useCallback((data: ActiveAlert | undefined | null) => {
+  const setAlertFromPayload = useCallback((data: ActiveAlertResponse | ActiveAlert | undefined | null) => {
     if (data == null || typeof data !== 'object') {
       setAlert(null)
+      setAlertsList([])
       return
     }
     const hasAlert = data.type !== 'none' && (data.cities?.length ?? 0) > 0
-    setAlert(hasAlert ? data : null)
+    if (!hasAlert) {
+      setAlert(null)
+      setAlertsList([])
+      return
+    }
+    setAlert(data)
+    const list = 'alerts' in data && Array.isArray(data.alerts) && data.alerts.length > 0
+      ? data.alerts
+      : [data]
+    setAlertsList(list)
   }, [])
 
   const fetchAlert = useCallback(async () => {
     try {
-      const res = await api.get<ActiveAlert>('/alerts/active')
+      const res = await api.get<ActiveAlertResponse>('/alerts/active')
       setAlertFromPayload(res?.data ?? null)
       setError(null)
       setAlertUpdatedAt(Date.now())
@@ -39,7 +51,7 @@ export function useAlerts() {
       sseRef.current = es
       es.onmessage = (e) => {
         try {
-          const data = JSON.parse(e.data) as ActiveAlert
+          const data = JSON.parse(e.data) as ActiveAlertResponse | ActiveAlert
           setAlertFromPayload(data)
           setAlertUpdatedAt(Date.now())
         } catch (_) {}
@@ -71,5 +83,5 @@ export function useAlerts() {
     return () => document.removeEventListener('visibilitychange', onVisibilityChange)
   }, [fetchAlert])
 
-  return { alert, loading, error, refetch: fetchAlert, alertUpdatedAt }
+  return { alert, alertsList, loading, error, refetch: fetchAlert, alertUpdatedAt }
 }

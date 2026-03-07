@@ -5,6 +5,12 @@ export interface ActiveAlert {
   instructions?: string
 }
 
+/** Response from GET /alerts/active when there is an active alert: merged view + list by type */
+export interface ActiveAlertResponse extends ActiveAlert {
+  /** Present when active; one item per alert type (e.g. missiles, hostileAircraftIntrusion) */
+  alerts?: ActiveAlert[]
+}
+
 export interface AlertHistoryEntry {
   data: string
   date: string

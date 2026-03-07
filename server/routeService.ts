@@ -7,7 +7,7 @@ import { createRequire } from 'module'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import { getAlertHistory, getHeatmapData, getAlertHistorySummary, getAlertHistorySummaryBySlot } from './alertService'
-import { getActiveAlertSync } from './alertService'
+import { getActiveAlertSync, getActiveAlertsSync } from './alertService'
 import type { HeatmapPoint } from './alertService'
 
 const require = createRequire(import.meta.url)
@@ -504,31 +504,34 @@ interface GeoJSONFeatureCollection {
   features: GeoJSONFeature[]
 }
 
-/** Return GeoJSON polygons for currently active alert cities (for map overlay). Names by lang (he = Hebrew, en = English). */
+/** Return GeoJSON polygons for currently active alert cities (for map overlay). Each feature has properties.name and properties.alertType for styling by type. */
 export function getActiveAlertZones(lang: 'he' | 'en' = 'he'): GeoJSONFeatureCollection | null {
   ensureZoneData()
-  const active = getActiveAlertSync()
-  if (!active?.cities?.length) return null
+  const alerts = getActiveAlertsSync()
+  if (!alerts.length) return null
   const n2id = getNameToId()
   const idToCity = new Map<number, CityRecord>()
   for (const c of citiesList) {
     if (c.id !== 0) idToCity.set(c.id, c)
   }
   const features: GeoJSONFeature[] = []
-  for (const cityName of active.cities) {
-    const id = n2id.get(cityName)
-    if (id == null) continue
-    const raw = polygonsMap[String(id)]
-    if (!raw?.length) continue
-    const ring = toGeoJSONRing(raw)
-    if (!ring.length) continue
-    const city = idToCity.get(id)
-    const displayName = lang === 'en' ? (city?.name_en || cityName) : cityName
-    features.push({
-      type: 'Feature',
-      properties: { name: displayName },
-      geometry: { type: 'Polygon', coordinates: [ring] },
-    })
+  for (const alert of alerts) {
+    const alertType = alert.type
+    for (const cityName of alert.cities) {
+      const id = n2id.get(cityName)
+      if (id == null) continue
+      const raw = polygonsMap[String(id)]
+      if (!raw?.length) continue
+      const ring = toGeoJSONRing(raw)
+      if (!ring.length) continue
+      const city = idToCity.get(id)
+      const displayName = lang === 'en' ? (city?.name_en || cityName) : cityName
+      features.push({
+        type: 'Feature',
+        properties: { name: displayName, alertType },
+        geometry: { type: 'Polygon', coordinates: [ring] },
+      })
+    }
   }
   if (features.length === 0) return null
   return { type: 'FeatureCollection', features }

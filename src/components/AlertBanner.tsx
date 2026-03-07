@@ -1,9 +1,29 @@
-import { useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { t } from '../i18n'
 import type { ActiveAlert } from '../types'
 
+/** Display label and color for map/banner by alert type */
+export const ALERT_TYPE_STYLES: Record<string, { labelKey: string; color: string }> = {
+  missiles: { labelKey: 'alertTypeMissiles', color: '#e74c3c' },
+  hostileAircraftIntrusion: { labelKey: 'alertTypeHostileAircraft', color: '#e67e22' },
+  general: { labelKey: 'alertTypeGeneral', color: '#f39c12' },
+  newsFlash: { labelKey: 'alertTypeNewsFlash', color: '#9b59b6' },
+}
+const DEFAULT_ALERT_COLOR = '#c0392b'
+
+function getAlertTypeStyle(type: string): { label: string; color: string } {
+  const style = ALERT_TYPE_STYLES[type]
+  if (style) {
+    const label = t(style.labelKey)
+    return { label: label !== style.labelKey ? label : type, color: style.color }
+  }
+  return { label: type, color: DEFAULT_ALERT_COLOR }
+}
+
 interface AlertBannerProps {
   alert: ActiveAlert | null
+  /** When multiple types, list by type for expandable UI */
+  alertsList?: ActiveAlert[]
   inDangerZone: boolean
   countdownSeconds: number | null
   currentLocationName: string | null
@@ -25,8 +45,18 @@ function playAlertSound() {
   } catch (_) {}
 }
 
-export function AlertBanner({ alert, inDangerZone, countdownSeconds, currentLocationName, onShowShelters }: AlertBannerProps) {
+export function AlertBanner({
+  alert,
+  alertsList = [],
+  inDangerZone,
+  countdownSeconds,
+  currentLocationName,
+  onShowShelters,
+}: AlertBannerProps) {
+  const [expanded, setExpanded] = useState(false)
   const playedRef = useRef(false)
+  const list = alertsList.length > 0 ? alertsList : alert ? [alert] : []
+  const multiType = list.length > 1
 
   useEffect(() => {
     if (alert && inDangerZone && !playedRef.current) {
@@ -39,7 +69,8 @@ export function AlertBanner({ alert, inDangerZone, countdownSeconds, currentLoca
   if (!alert) return null
 
   const cities = alert.cities ?? []
-  const title =
+
+  const titleSingle =
     cities.length === 0
       ? t('rocketAlert')
       : inDangerZone && currentLocationName
@@ -54,13 +85,49 @@ export function AlertBanner({ alert, inDangerZone, countdownSeconds, currentLoca
 
   return (
     <div
-      className={`alert-banner ${inDangerZone ? 'alert-banner--danger' : ''}`}
+      className={`alert-banner ${inDangerZone ? 'alert-banner--danger' : ''} ${multiType ? 'alert-banner--expandable' : ''}`}
       role="alert"
       aria-live="assertive"
     >
       <div className="alert-banner__content">
-        <h2 className="alert-banner__title">{title}</h2>
-        {alert.instructions && (
+        {multiType ? (
+          <>
+            <button
+              type="button"
+              className="alert-banner__summary"
+              onClick={() => setExpanded((e) => !e)}
+              aria-expanded={expanded}
+            >
+              <span className="alert-banner__title">
+                {t('alertTypesCount').replace('{{count}}', String(list.length))}
+              </span>
+              <span className="alert-banner__toggle" aria-hidden>
+                {expanded ? '−' : '+'}
+              </span>
+            </button>
+            {expanded && (
+              <ul className="alert-banner__list">
+                {list.map((a) => {
+                  const { label, color } = getAlertTypeStyle(a.type)
+                  const cityList = a.cities?.length < 5 ? a.cities.join(', ') : `${t('alertIn')} ${a.cities.length} ${t('locations')}`
+                  return (
+                    <li key={a.type} className="alert-banner__type" style={{ ['--alert-type-color' as string]: color }}>
+                      <span className="alert-banner__type-pill" style={{ backgroundColor: color }} />
+                      <span className="alert-banner__type-label">{label}:</span>{' '}
+                      <span className="alert-banner__type-cities">{cityList}</span>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </>
+        ) : (
+          <h2 className="alert-banner__title">{titleSingle}</h2>
+        )}
+        {alert.instructions && !multiType && (
+          <p className="alert-banner__instructions">{alert.instructions}</p>
+        )}
+        {alert.instructions && multiType && expanded && (
           <p className="alert-banner__instructions">{alert.instructions}</p>
         )}
         {countdownSeconds != null && countdownSeconds > 0 && (

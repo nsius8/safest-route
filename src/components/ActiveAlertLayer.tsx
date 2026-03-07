@@ -2,10 +2,18 @@ import { useEffect, useRef } from 'react'
 import { useMap } from 'react-leaflet'
 import L from 'leaflet'
 import api from '../services/api'
+import { ALERT_TYPE_STYLES } from './AlertBanner'
+
+const DEFAULT_ZONE_COLOR = '#e74c3c'
+
+function getColorForAlertType(alertType: string | undefined): string {
+  if (!alertType) return DEFAULT_ZONE_COLOR
+  return ALERT_TYPE_STYLES[alertType]?.color ?? DEFAULT_ZONE_COLOR
+}
 
 interface GeoJSONFeature {
   type: 'Feature'
-  properties?: Record<string, unknown>
+  properties?: Record<string, unknown> & { alertType?: string }
   geometry: { type: 'Polygon'; coordinates: [number, number][][] }
 }
 
@@ -63,10 +71,12 @@ export function ActiveAlertLayer({ active, routeCoordinates, lang = 'he', alertU
       const routeCoords = routeCoordinates ?? []
       const geo = L.geoJSON(data as GeoJSONFC, {
         style: (feature) => {
-          const near = feature && isFeatureNearRoute(feature as GeoJSONFeature, routeCoords)
+          const f = feature as GeoJSONFeature
+          const near = f && isFeatureNearRoute(f, routeCoords)
+          const color = getColorForAlertType(f?.properties?.alertType)
           return {
-            color: '#e74c3c',
-            fillColor: '#e74c3c',
+            color,
+            fillColor: color,
             fillOpacity: 0.35,
             weight: 2,
             className: near ? 'alert-zone-blink' : '',

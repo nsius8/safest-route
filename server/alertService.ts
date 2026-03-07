@@ -63,56 +63,113 @@ function pruneOldPushes(): void {
   alertPushLog = alertPushLog.filter((p) => p.receivedAt >= cutoff)
 }
 
-/** Derive active alert from pushes in the last ALERT_WINDOW_MS: union of cities, latest type/instructions. */
-function getDerivedActive(): ActiveAlertPayload | null {
+/** Per-city latest mention: type and receivedAt from the most recent push that mentioned that city. */
+interface CityLatest {
+  type: string
+  receivedAt: number
+  instructions?: string
+}
+
+/**
+ * Derive active alerts from pushes in the last ALERT_WINDOW_MS.
+ * - For each city we use the *most recent* push that mentioned it. If that push has type 'none', the city is cleared (excluded).
+ * - Supports multiple types in parallel: cities are grouped by that latest type.
+ */
+function getDerivedActiveAlerts(): ActiveAlertPayload[] {
   pruneOldPushes()
-  if (alertPushLog.length === 0) return null
-  const allCities = new Set<string>()
-  let latest = alertPushLog[0]
-  for (const p of alertPushLog) {
-    if (p.cities?.length) for (const c of p.cities) allCities.add(c)
-    if (p.receivedAt > latest.receivedAt) latest = p
+  if (alertPushLog.length === 0) return []
+  const byReceivedAsc = [...alertPushLog].sort((a, b) => a.receivedAt - b.receivedAt)
+  const cityLatest = new Map<string, CityLatest>()
+  for (const p of byReceivedAsc) {
+    if (!p.cities?.length) continue
+    for (const c of p.cities) {
+      cityLatest.set(c, { type: p.type, receivedAt: p.receivedAt, instructions: p.instructions })
+    }
   }
-  if (allCities.size === 0) return null
-  return {
-    type: latest.type,
-    cities: [...allCities],
-    instructions: latest.instructions,
+  const typeToCities = new Map<string, Set<string>>()
+  const typeToInstructions = new Map<string, string | undefined>()
+  for (const [city, cl] of cityLatest) {
+    if (cl.type === 'none') continue
+    if (!typeToCities.has(cl.type)) {
+      typeToCities.set(cl.type, new Set())
+      typeToInstructions.set(cl.type, cl.instructions)
+    }
+    typeToCities.get(cl.type)!.add(city)
   }
+  const alerts: ActiveAlertPayload[] = []
+  for (const [type, cities] of typeToCities) {
+    if (cities.size === 0) continue
+    alerts.push({
+      type,
+      cities: [...cities],
+      instructions: typeToInstructions.get(type),
+    })
+  }
+  return alerts
 }
 
+/** Single merged view for backward compat: all cities from all types; type is first type or 'multiple'. */
 export function getActiveAlertSync(): ActiveAlertPayload | null {
-  return getDerivedActive()
+  const alerts = getDerivedActiveAlerts()
+  if (alerts.length === 0) return null
+  const allCities = new Set<string>()
+  let instructions: string | undefined
+  for (const a of alerts) {
+    for (const c of a.cities) allCities.add(c)
+    if (instructions == null) instructions = a.instructions
+  }
+  const type = alerts.length === 1 ? alerts[0].type : 'multiple'
+  return { type, cities: [...allCities], instructions }
 }
 
-export function subscribeToAlerts(listener: (alert: ActiveAlertPayload | null) => void): () => void {
-  alertListeners.push(listener)
-  listener(getDerivedActive())
+/** Full list of active alerts by type (for multiple types in parallel, e.g. drone + missile). */
+export function getActiveAlertsSync(): ActiveAlertPayload[] {
+  return getDerivedActiveAlerts()
+}
+
+/** Same as getActiveAlertSync but with alerts[] when active (for REST/SSE so client can show multiple types). */
+export function getActiveAlertWithListSync(): (ActiveAlertPayload & { alerts: ActiveAlertPayload[] }) | null {
+  const merged = getActiveAlertSync()
+  if (!merged) return null
+  return { ...merged, alerts: getActiveAlertsSync() }
+}
+
+export function subscribeToAlerts(listener: (alert: (ActiveAlertPayload & { alerts?: ActiveAlertPayload[] }) | null) => void): () => void {
+  alertListeners.push(listener as (alert: ActiveAlertPayload | null) => void)
+  listener(getActiveAlertWithListSync())
   return () => {
     alertListeners = alertListeners.filter((l) => l !== listener)
   }
 }
 
 function notifyListeners(alert: ActiveAlertPayload | null) {
-  alertListeners.forEach((l) => l(alert))
+  const payload = alert ? { ...alert, alerts: getActiveAlertsSync() } : null
+  alertListeners.forEach((l) => l(payload as (ActiveAlertPayload & { alerts: ActiveAlertPayload[] }) | null))
 }
 
-/** Append a push (or "clear") and notify SSE with derived active state. */
+/**
+ * Append a push (or "clear").
+ * - Type 'none' with cities: those cities are cleared when deriving (latest mention wins).
+ * - null or type 'none' with empty cities: treated as "all clear" — we push type 'none' with
+ *   the list of currently derived active cities so they are cleared immediately (e.g. OREF polling).
+ */
 export function pushAlert(alert: ActiveAlertPayload | null): void {
   const now = Date.now()
-  if (alert == null || alert.type === 'none' || !alert.cities?.length) {
-    alertPushLog.push({ type: 'none', cities: [], receivedAt: now })
+  if (alert == null || (alert.type === 'none' && !(alert.cities?.length > 0))) {
+    const currentAlerts = getDerivedActiveAlerts()
+    const citiesToClear = new Set<string>()
+    for (const a of currentAlerts) for (const c of a.cities) citiesToClear.add(c)
+    alertPushLog.push({ type: 'none', cities: [...citiesToClear], receivedAt: now })
   } else {
     alertPushLog.push({
       type: alert.type,
-      cities: alert.cities,
+      cities: alert.cities ?? [],
       instructions: alert.instructions,
       receivedAt: now,
     })
   }
   pruneOldPushes()
-  const derived = getDerivedActive()
-  notifyListeners(derived)
+  notifyListeners(getActiveAlertSync())
 }
 
 /**

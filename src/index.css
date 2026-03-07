@@ -144,8 +144,8 @@ body[dir="rtl"] {
 @media (min-width: 768px) {
   .app__alert-wrap {
     left: 1rem;
-    right: auto;
-    max-width: 420px;
+    right: 1rem;
+    max-width: none;
   }
 }
 
@@ -568,6 +568,75 @@ body[dir="rtl"] {
 
 .alert-banner__shelters:hover {
   filter: brightness(1.1);
+}
+
+.alert-banner--expandable .alert-banner__content {
+  padding-right: 2.5rem;
+}
+
+.alert-banner__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.alert-banner__summary .alert-banner__title {
+  margin-bottom: 0;
+}
+
+.alert-banner__toggle {
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  font-weight: 700;
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.alert-banner__list {
+  list-style: none;
+  padding: 0;
+  margin: 0.75rem 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.alert-banner__type {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.alert-banner__type-pill {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  margin-top: 0.35rem;
+}
+
+.alert-banner__type-label {
+  font-weight: 600;
+  color: #fff;
+}
+
+.alert-banner__type-cities {
+  color: rgba(255, 255, 255, 0.95);
 }
 
 /* Active alert zone that crosses or is near the route – blink */

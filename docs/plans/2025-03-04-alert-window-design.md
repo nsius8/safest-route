@@ -104,3 +104,20 @@ Recommendation: add a “refetch key” or “lastSyncAt” from useAlerts that 
 | 3 | **useAlerts.ts** – On `visibilitychange`, if `document.visibilityState === 'visible'`, call `refetch()`. Expose a simple `alertUpdatedAt` (number) or refetch counter so the map can refetch zones. | Use a ref/counter that increments on each successful fetch. |
 | 4 | **ActiveAlertLayer** – Accept optional `alertUpdatedAt` (or similar) in props; when alert is active, include it in effect deps so polygons refetch when user returns to tab. | App passes `alertUpdatedAt` from useAlerts into Map → ActiveAlertLayer. |
 | 5 | **App.tsx** – Pass `alertUpdatedAt` from useAlerts to Map so ActiveAlertLayer can depend on it. | One prop thread. |
+
+---
+
+## Variations & edge cases (review)
+
+These were checked so alerts are not harmed and behaviour is consistent.
+
+| Variation | Behaviour | Notes |
+|-----------|-----------|--------|
+| **Clear by city list** | `POST` with `type: 'none'` and `cities: ['A','B']` stores that push; when deriving, any city whose *latest* mention is type `'none'` is excluded. So A and B are cleared. | Correct. |
+| **All clear (no city list)** | OREF polling and `POST` with `type: 'none'` and no/empty `cities` are treated as “clear all”: we push `type: 'none'` with the list of *currently* derived active cities, so they are all cleared on the next derivation. | Implemented in `pushAlert()` so OREF “no alert” clears the map immediately. |
+| **Push order** | Pushes are sorted by `receivedAt` ascending; for each city we keep the *latest* mention. So chronological order is respected. | Correct. |
+| **Same city, two types over time** | E.g. missiles [A] then drone [A]: A’s latest is drone; A appears only under the second type. | Correct. |
+| **Two types in parallel** | E.g. missiles [A,B] and drone [C]: derivation returns two alerts; `getActiveAlertSync()` returns merged view with `type: 'multiple'` and `cities: [A,B,C]`. Zones and routes see all cities. | Backward compatible. |
+| **Pruning** | `pruneOldPushes()` runs at start of derivation and after each push. Cities older than the window drop out automatically. | Correct. |
+| **Client** | `useAlerts`: `type !== 'none'` and `cities.length > 0` → show alert. So `type: 'multiple'` is treated as active. No change needed. | Correct. |
+| **Instructions** | Per-type instructions come from one of the pushes that contributed to that type (map iteration order). Not strictly “latest push per type”. | Acceptable; can be refined later if we need latest-instructions-per-type. |

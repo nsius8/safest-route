@@ -5,7 +5,8 @@ import { fileURLToPath } from 'url'
 import express from 'express'
 import cors from 'cors'
 import {
-  getActiveAlertSync,
+  getActiveAlertWithListSync,
+  getActiveAlertsSync,
   subscribeToAlerts,
   startLiveAlertPolling,
   pushAlert,
@@ -28,10 +29,16 @@ app.get('/health', (_req, res) => {
   res.json({ ok: true })
 })
 
-// REST: current alert
+// REST: current alert. When active, includes alerts[] (by type) for UI to show/expand multiple types.
 app.get('/api/alerts/active', (_req, res) => {
-  const alert = getActiveAlertSync()
-  res.json(alert ?? { type: 'none', cities: [] })
+  const payload = getActiveAlertWithListSync()
+  res.json(payload ?? { type: 'none', cities: [] })
+})
+
+// REST: active alerts by type (for multiple types in parallel, e.g. drone + missile)
+app.get('/api/alerts/active-list', (_req, res) => {
+  const alerts = getActiveAlertsSync()
+  res.json({ alerts })
 })
 
 // Push alert from a local machine (e.g. in Israel) that polls OREF. Requires ALERT_PUSH_SECRET.
@@ -52,7 +59,13 @@ app.post('/api/alerts/push', (req, res) => {
     res.status(400).json({ error: 'Expected JSON body' })
     return
   }
-  if (body.type === 'none' || !body.cities || !Array.isArray(body.cities) || body.cities.length === 0) {
+  if (body.type === 'none') {
+    const cities = Array.isArray(body.cities) ? body.cities.map((c: unknown) => String(c)) : []
+    pushAlert({ type: 'none', cities })
+    res.json({ ok: true, alert: null })
+    return
+  }
+  if (!body.cities || !Array.isArray(body.cities) || body.cities.length === 0) {
     pushAlert(null)
     res.json({ ok: true, alert: null })
     return

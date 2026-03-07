@@ -33,7 +33,7 @@ function timeToSlot(time: string): number {
 
 function App() {
   const [lang, setLangState] = useState<Lang>('he')
-  const { alert, alertUpdatedAt } = useAlerts()
+  const { alert, alertsList, alertUpdatedAt } = useAlerts()
   const { position: myPosition, refresh: refreshLocation } = useLocation()
 
   const setLang = useCallback((l: Lang) => {
@@ -293,6 +293,7 @@ function App() {
       <div className="app__alert-wrap">
         <AlertBanner
           alert={alert}
+          alertsList={alertsList}
           inDangerZone={inDangerZone}
           countdownSeconds={countdown}
           currentLocationName={lang === 'he' ? zoneLocationName : (zoneLocationNameEn || zoneLocationName)}
