@@ -80,9 +80,9 @@ body[dir="rtl"] {
   left: 0;
   right: 0;
   z-index: 1000;
+  min-height: 3.25rem;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   padding: 0.75rem 1rem;
   background: rgba(42, 42, 46, 0.85);
   backdrop-filter: blur(12px);
@@ -91,8 +91,21 @@ body[dir="rtl"] {
 }
 
 .app__title {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
   font-size: 1.25rem;
   font-weight: 700;
+  pointer-events: none;
+}
+
+.app__lang {
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
 }
 
 .app__lang button {
