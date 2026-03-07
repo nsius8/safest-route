@@ -147,6 +147,18 @@ body[dir="rtl"] {
     right: 1rem;
     max-width: none;
   }
+
+  /* When alert is visible, reserve space so zoom and panel sit below the alert bar */
+  .app.app--has-alert .app__alert-wrap {
+    max-height: 12rem;
+    overflow-y: auto;
+  }
+  .app.app--has-alert .app__zoom-wrap {
+    top: 14rem;
+  }
+  .app.app--has-alert .app__panel {
+    top: 14rem;
+  }
 }
 
 /* Map – fill parent when not in app__map-wrap (e.g. legacy) */

@@ -253,7 +253,7 @@ function App() {
   }, [route])
 
   return (
-    <div className="app">
+    <div className={`app ${alert ? 'app--has-alert' : ''}`}>
       <div className="app__map-wrap">
         <Map
           activeAlert={!!alert}

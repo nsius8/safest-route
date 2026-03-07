@@ -127,11 +127,13 @@ export function getActiveAlertsSync(): ActiveAlertPayload[] {
   return getDerivedActiveAlerts()
 }
 
-/** Same as getActiveAlertSync but with alerts[] when active (for REST/SSE so client can show multiple types). */
-export function getActiveAlertWithListSync(): (ActiveAlertPayload & { alerts: ActiveAlertPayload[] }) | null {
+/** Same as getActiveAlertSync; includes alerts[] only when there are 2+ types (no duplication for single type). */
+export function getActiveAlertWithListSync(): (ActiveAlertPayload & { alerts?: ActiveAlertPayload[] }) | null {
   const merged = getActiveAlertSync()
   if (!merged) return null
-  return { ...merged, alerts: getActiveAlertsSync() }
+  const list = getActiveAlertsSync()
+  if (list.length > 1) return { ...merged, alerts: list }
+  return merged
 }
 
 export function subscribeToAlerts(listener: (alert: (ActiveAlertPayload & { alerts?: ActiveAlertPayload[] }) | null) => void): () => void {
@@ -143,8 +145,8 @@ export function subscribeToAlerts(listener: (alert: (ActiveAlertPayload & { aler
 }
 
 function notifyListeners(alert: ActiveAlertPayload | null) {
-  const payload = alert ? { ...alert, alerts: getActiveAlertsSync() } : null
-  alertListeners.forEach((l) => l(payload as (ActiveAlertPayload & { alerts: ActiveAlertPayload[] }) | null))
+  const payload = alert ? getActiveAlertWithListSync() : null
+  alertListeners.forEach((l) => l(payload))
 }
 
 /**
