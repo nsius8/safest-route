@@ -35,6 +35,7 @@ const strings: Record<Lang, Record<string, string>> = {
     locations: 'locations',
     panelExpand: 'Show route panel',
     panelCollapse: 'Hide route panel',
+    disclaimer: 'Disclaimer: You are solely responsible for your actions. Shelter information is based on open sources and may be incomplete or outdated. First and foremost, follow the official instructions of Pikud Haoref (Home Front Command) at the sound of any alert or alarm. This site does not replace Pikud Haoref and is for informational use only.',
   },
   he: {
     appTitle: 'המסלול הבטוח',
@@ -70,6 +71,7 @@ const strings: Record<Lang, Record<string, string>> = {
     locations: 'אזורים',
     panelExpand: 'הצג פאנל מסלול',
     panelCollapse: 'הסתר פאנל',
+    disclaimer: 'הצהרה: המשתמש אחראי בלעדית לפעולותיו. מידע על מרחבים מוגנים מבוסס על מקורות פתוחים ועשוי להיות חלקי או לא מעודכן. בראש ובראשונה יש לפעול לפי הנחיות פיקוד העורף בעת כל התראה או אזעקה. האתר אינו מחליף את פיקוד העורף ומיועד למטרות מידע בלבד.',
   },
 }
 

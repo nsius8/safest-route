@@ -606,6 +606,17 @@ body[dir="rtl"] {
 .legend__swatch--route { background: #3498db; }
 .legend__swatch--shelter { background: #2ecc71; border-radius: 50%; }
 
+/* Disclaimer */
+.app__disclaimer {
+  margin: 0;
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
 /* Shelter modal */
 .shelter-modal-overlay {
   position: fixed;

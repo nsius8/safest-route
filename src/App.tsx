@@ -376,6 +376,7 @@ function App() {
           )}
         </div>
         <Legend showSheltersOnMap={showSheltersOnMap} onToggleShowShelters={() => setShowSheltersOnMap((v) => !v)} />
+        <p className="app__disclaimer">{t('disclaimer')}</p>
       </div>
       <ShelterModal
         open={shelterModalOpen}
