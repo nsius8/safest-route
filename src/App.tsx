@@ -73,6 +73,8 @@ function App() {
   const countdownEndsAtRef = useRef<number | null>(null)
   /** Once countdown reaches 0, don't restart for the same stay-in-zone; reset when user leaves zone or alert clears. */
   const countdownAlreadyCompletedRef = useRef(false)
+  const drawerTouchStartY = useRef<number | null>(null)
+  const drawerSwipeHandled = useRef(false)
 
   // Refetch safety + zones when language, route, score mode or (when by-time) selected time changes
   useEffect(() => {
@@ -300,7 +302,31 @@ function App() {
         <button
           type="button"
           className="app__panel-handle"
-          onClick={() => setMobilePanelExpanded((v) => !v)}
+          onClick={() => {
+            if (drawerSwipeHandled.current) {
+              drawerSwipeHandled.current = false
+              return
+            }
+            setMobilePanelExpanded((v) => !v)
+          }}
+          onTouchStart={(e) => {
+            drawerTouchStartY.current = e.touches[0].clientY
+          }}
+          onTouchEnd={(e) => {
+            const startY = drawerTouchStartY.current
+            drawerTouchStartY.current = null
+            if (startY == null) return
+            const endY = e.changedTouches[0].clientY
+            const dy = endY - startY
+            const threshold = 50
+            if (dy > threshold) {
+              setMobilePanelExpanded(false)
+              drawerSwipeHandled.current = true
+            } else if (dy < -threshold) {
+              setMobilePanelExpanded(true)
+              drawerSwipeHandled.current = true
+            }
+          }}
           aria-expanded={mobilePanelExpanded}
           aria-label={mobilePanelExpanded ? t('panelCollapse') : t('panelExpand')}
         >
