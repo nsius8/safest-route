@@ -7,6 +7,7 @@ const OREF_HISTORY_URL = 'https://alerts-history.oref.org.il/Shared/Ajax/GetAlar
 const HISTORY_MODE = 2
 const POLL_INTERVAL_MS = 3000
 const HISTORY_CACHE_TTL_MS = 30 * 60 * 1000 // 30 minutes
+const ALERT_WINDOW_MS = 10 * 60 * 1000 // 10 minutes: keep pushes in this window; active = union of cities in window
 
 /** Lang for OREF history API: 'he' | 'en' */
 export type HistoryLang = 'he' | 'en'
@@ -40,7 +41,15 @@ function isMissileAlert(entry: AlertHistoryEntryPayload): boolean {
   return lower.includes('missile') || lower === 'missiles' || t.includes('טילים')
 }
 
-let currentAlert: ActiveAlertPayload | null = null
+/** Stored push: each POST /api/alerts/push is appended with receivedAt; pruned when older than ALERT_WINDOW_MS. */
+interface StoredPush {
+  type: string
+  cities: string[]
+  instructions?: string
+  receivedAt: number
+}
+
+let alertPushLog: StoredPush[] = []
 let alertListeners: ((alert: ActiveAlertPayload | null) => void)[] = []
 
 // Dynamic import for CommonJS package (pikud-haoref-api)
@@ -49,26 +58,61 @@ async function getPikudHaoref() {
   return mod.default ?? mod
 }
 
+function pruneOldPushes(): void {
+  const cutoff = Date.now() - ALERT_WINDOW_MS
+  alertPushLog = alertPushLog.filter((p) => p.receivedAt >= cutoff)
+}
+
+/** Derive active alert from pushes in the last ALERT_WINDOW_MS: union of cities, latest type/instructions. */
+function getDerivedActive(): ActiveAlertPayload | null {
+  pruneOldPushes()
+  if (alertPushLog.length === 0) return null
+  const allCities = new Set<string>()
+  let latest = alertPushLog[0]
+  for (const p of alertPushLog) {
+    if (p.cities?.length) for (const c of p.cities) allCities.add(c)
+    if (p.receivedAt > latest.receivedAt) latest = p
+  }
+  if (allCities.size === 0) return null
+  return {
+    type: latest.type,
+    cities: [...allCities],
+    instructions: latest.instructions,
+  }
+}
+
 export function getActiveAlertSync(): ActiveAlertPayload | null {
-  return currentAlert
+  return getDerivedActive()
 }
 
 export function subscribeToAlerts(listener: (alert: ActiveAlertPayload | null) => void): () => void {
   alertListeners.push(listener)
-  listener(currentAlert)
+  listener(getDerivedActive())
   return () => {
     alertListeners = alertListeners.filter((l) => l !== listener)
   }
 }
 
 function notifyListeners(alert: ActiveAlertPayload | null) {
-  currentAlert = alert
   alertListeners.forEach((l) => l(alert))
 }
 
-/** Set current alert from an external push (e.g. from a machine in Israel). Notifies SSE listeners. */
+/** Append a push (or "clear") and notify SSE with derived active state. */
 export function pushAlert(alert: ActiveAlertPayload | null): void {
-  notifyListeners(alert)
+  const now = Date.now()
+  if (alert == null || alert.type === 'none' || !alert.cities?.length) {
+    alertPushLog.push({ type: 'none', cities: [], receivedAt: now })
+  } else {
+    alertPushLog.push({
+      type: alert.type,
+      cities: alert.cities,
+      instructions: alert.instructions,
+      receivedAt: now,
+    })
+  }
+  pruneOldPushes()
+  const derived = getDerivedActive()
+  notifyListeners(derived)
 }
 
 /**
@@ -85,7 +129,7 @@ export function startLiveAlertPolling(options?: { proxy?: string }) {
             return
           }
           const hasAlert = alert && alert.type !== 'none' && (alert.cities?.length ?? 0) > 0
-          notifyListeners(hasAlert ? alert : null)
+          pushAlert(hasAlert ? alert : null)
         },
         options ? { proxy: options.proxy } : {}
       )

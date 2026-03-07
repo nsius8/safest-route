@@ -6,6 +6,7 @@ export function useAlerts() {
   const [alert, setAlert] = useState<ActiveAlert | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [alertUpdatedAt, setAlertUpdatedAt] = useState(0)
   const sseRef = useRef<EventSource | null>(null)
 
   const setAlertFromPayload = useCallback((data: ActiveAlert | undefined | null) => {
@@ -22,6 +23,7 @@ export function useAlerts() {
       const res = await api.get<ActiveAlert>('/alerts/active')
       setAlertFromPayload(res?.data ?? null)
       setError(null)
+      setAlertUpdatedAt(Date.now())
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to fetch alerts')
       setAlertFromPayload(null)
@@ -39,6 +41,7 @@ export function useAlerts() {
         try {
           const data = JSON.parse(e.data) as ActiveAlert
           setAlertFromPayload(data)
+          setAlertUpdatedAt(Date.now())
         } catch (_) {}
       }
       es.onerror = () => {
@@ -58,5 +61,15 @@ export function useAlerts() {
     }
   }, [fetchAlert, setAlertFromPayload])
 
-  return { alert, loading, error, refetch: fetchAlert }
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchAlert().catch(() => {})
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange)
+  }, [fetchAlert])
+
+  return { alert, loading, error, refetch: fetchAlert, alertUpdatedAt }
 }

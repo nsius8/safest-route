@@ -40,7 +40,7 @@ function isFeatureNearRoute(feature: GeoJSONFeature, routeCoords: number[][]): b
   return false
 }
 
-export function ActiveAlertLayer({ active, routeCoordinates, lang = 'he' }: { active: boolean; routeCoordinates?: number[][]; lang?: 'he' | 'en' }) {
+export function ActiveAlertLayer({ active, routeCoordinates, lang = 'he', alertUpdatedAt = 0 }: { active: boolean; routeCoordinates?: number[][]; lang?: 'he' | 'en'; alertUpdatedAt?: number }) {
   const map = useMap()
   const layerRef = useRef<L.GeoJSON | null>(null)
 
@@ -91,7 +91,7 @@ export function ActiveAlertLayer({ active, routeCoordinates, lang = 'he' }: { ac
         layerRef.current = null
       }
     }
-  }, [map, active, routeCoordinates, lang])
+  }, [map, active, routeCoordinates, lang, alertUpdatedAt])
 
   return null
 }

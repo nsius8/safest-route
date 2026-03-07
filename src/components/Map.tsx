@@ -155,6 +155,7 @@ interface MapProps {
   userPosition: LatLng | null
   showHeatmap?: boolean
   lang?: Lang
+  alertUpdatedAt?: number
   children?: React.ReactNode
 }
 
@@ -171,7 +172,7 @@ function ZoomControlPortal() {
   )
 }
 
-export function Map({ activeAlert, route, shelters, zonesAlongRoute, userPosition, showHeatmap = false, lang = 'he', children }: MapProps) {
+export function Map({ activeAlert, route, shelters, zonesAlongRoute, userPosition, showHeatmap = false, lang = 'he', alertUpdatedAt = 0, children }: MapProps) {
   return (
     <div className="map-wrapper">
       <MapContainer
@@ -191,6 +192,7 @@ export function Map({ activeAlert, route, shelters, zonesAlongRoute, userPositio
           active={activeAlert}
           routeCoordinates={route?.segments?.[0]?.coordinates}
           lang={lang}
+          alertUpdatedAt={alertUpdatedAt}
         />
         <RouteLayer route={route} />
         {zonesAlongRoute.length > 0 && <ZoneAlongRouteLayer zones={zonesAlongRoute} />}

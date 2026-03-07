@@ -33,7 +33,7 @@ function timeToSlot(time: string): number {
 
 function App() {
   const [lang, setLangState] = useState<Lang>('he')
-  const { alert } = useAlerts()
+  const { alert, alertUpdatedAt } = useAlerts()
   const { position: myPosition, refresh: refreshLocation } = useLocation()
 
   const setLang = useCallback((l: Lang) => {
@@ -263,6 +263,7 @@ function App() {
           userPosition={myPosition}
           showHeatmap={false}
           lang={lang}
+          alertUpdatedAt={alertUpdatedAt}
         />
       </div>
       <header className="app__header">
