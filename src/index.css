@@ -689,8 +689,9 @@ body[dir="rtl"] {
   font-size: 0.875rem;
 }
 
-/* Custom zoom control (rendered above map so it’s visible); see Map.tsx ZoomControlPortal */
+/* Custom zoom control (desktop only; hidden on mobile); see Map.tsx ZoomControlPortal */
 .app__zoom-wrap {
+  display: none;
   position: absolute;
   top: 4.5rem;
   right: 0.75rem;
@@ -737,6 +738,7 @@ body[dir="rtl"] {
 
 @media (min-width: 768px) {
   .app__zoom-wrap {
+    display: block;
     top: 5.5rem;
     right: 1rem;
   }
