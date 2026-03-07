@@ -13,6 +13,8 @@ import 'dotenv/config'
 import * as pikudHaoref from 'pikud-haoref-api'
 
 const POLL_MS = 3000
+const PUSH_MAX_RETRIES = 4
+const PUSH_RETRY_DELAY_MS = 6000
 
 const PUSH_URL = process.env.PUSH_URL || process.env.RENDER_APP_URL
 const SECRET = process.env.ALERT_PUSH_SECRET
@@ -33,24 +35,38 @@ function payloadKey(p: { type: string; cities: string[] } | null): string {
 
 let lastPushedKey: string | null = null
 
-function pushToServer(payload: { type: string; cities: string[]; instructions?: string } | null): void {
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+
+async function pushToServer(payload: { type: string; cities: string[]; instructions?: string } | null): Promise<void> {
   const key = payloadKey(payload)
   if (key === lastPushedKey) return
   lastPushedKey = key
   const url = `${PUSH_URL?.replace(/\/$/, '')}/api/alerts/push`
   const body = payload ? payload : { type: 'none', cities: [] }
-  fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${SECRET}`,
-    },
-    body: JSON.stringify(body),
-  })
-    .then((r) => {
-      if (!r.ok) console.warn('Push failed:', r.status, r.statusText)
-    })
-    .catch((e) => console.warn('Push error:', e))
+  for (let attempt = 1; attempt <= PUSH_MAX_RETRIES; attempt++) {
+    try {
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SECRET}`,
+        },
+        body: JSON.stringify(body),
+      })
+      if (!r.ok) {
+        console.warn('Push failed:', r.status, r.statusText)
+      }
+      return
+    } catch (e) {
+      const err = e instanceof Error ? e.message : String(e)
+      if (attempt === PUSH_MAX_RETRIES) {
+        console.warn('Push error (after', PUSH_MAX_RETRIES, 'attempts):', err)
+        return
+      }
+      console.warn('Push error (attempt', attempt, '/', PUSH_MAX_RETRIES, '), retrying in', PUSH_RETRY_DELAY_MS / 1000, 's:', err)
+      await sleep(PUSH_RETRY_DELAY_MS)
+    }
+  }
 }
 
 function poll(): void {
