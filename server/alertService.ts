@@ -63,17 +63,22 @@ function pruneOldPushes(): void {
   alertPushLog = alertPushLog.filter((p) => p.receivedAt >= cutoff)
 }
 
-/** Per-city latest mention: type and receivedAt from the most recent push that mentioned that city. */
+/** Per-city latest mention: type, receivedAt and instructions from the most recent push that mentioned that city. */
 interface CityLatest {
   type: string
   receivedAt: number
   instructions?: string
 }
 
+/** Unique key for a push so we keep multiple alerts of the same type (e.g. two newsFlash with different content) separate. */
+function pushKey(type: string, receivedAt: number): string {
+  return `${type}:${receivedAt}`
+}
+
 /**
  * Derive active alerts from pushes in the last ALERT_WINDOW_MS.
  * - For each city we use the *most recent* push that mentioned it. If that push has type 'none', the city is cleared (excluded).
- * - Supports multiple types in parallel: cities are grouped by that latest type.
+ * - Cities are grouped by (type, receivedAt) so two pushes of the same type (e.g. two newsFlash with different content) stay separate.
  */
 function getDerivedActiveAlerts(): ActiveAlertPayload[] {
   pruneOldPushes()
@@ -86,24 +91,19 @@ function getDerivedActiveAlerts(): ActiveAlertPayload[] {
       cityLatest.set(c, { type: p.type, receivedAt: p.receivedAt, instructions: p.instructions })
     }
   }
-  const typeToCities = new Map<string, Set<string>>()
-  const typeToInstructions = new Map<string, string | undefined>()
+  const keyToAlert = new Map<string, { type: string; cities: Set<string>; instructions?: string }>()
   for (const [city, cl] of cityLatest) {
     if (cl.type === 'none') continue
-    if (!typeToCities.has(cl.type)) {
-      typeToCities.set(cl.type, new Set())
-      typeToInstructions.set(cl.type, cl.instructions)
+    const key = pushKey(cl.type, cl.receivedAt)
+    if (!keyToAlert.has(key)) {
+      keyToAlert.set(key, { type: cl.type, cities: new Set(), instructions: cl.instructions })
     }
-    typeToCities.get(cl.type)!.add(city)
+    keyToAlert.get(key)!.cities.add(city)
   }
   const alerts: ActiveAlertPayload[] = []
-  for (const [type, cities] of typeToCities) {
+  for (const { type, cities, instructions } of keyToAlert.values()) {
     if (cities.size === 0) continue
-    alerts.push({
-      type,
-      cities: [...cities],
-      instructions: typeToInstructions.get(type),
-    })
+    alerts.push({ type, cities: [...cities], instructions })
   }
   return alerts
 }

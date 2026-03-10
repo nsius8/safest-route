@@ -2,6 +2,17 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import type { ActiveAlert, ActiveAlertResponse } from '../types'
 import api from '../services/api'
 
+/** Stable key for alert payload so we only bump alertUpdatedAt when zones would change */
+function alertPayloadKey(data: ActiveAlertResponse | ActiveAlert | null): string {
+  if (data == null || typeof data !== 'object') return 'none'
+  if (data.type === 'none' || !(data.cities?.length ?? 0)) return 'none'
+  const list = 'alerts' in data && Array.isArray(data.alerts) && data.alerts.length > 0 ? data.alerts : [data]
+  return list
+    .map((a) => `${a.type}:${[...(a.cities ?? [])].sort().join(',')}`)
+    .sort()
+    .join('|')
+}
+
 export function useAlerts() {
   const [alert, setAlert] = useState<ActiveAlert | null>(null)
   /** When active, list of alerts by type (for expandable banner and map colors) */
@@ -10,6 +21,7 @@ export function useAlerts() {
   const [error, setError] = useState<string | null>(null)
   const [alertUpdatedAt, setAlertUpdatedAt] = useState(0)
   const sseRef = useRef<EventSource | null>(null)
+  const lastPayloadKeyRef = useRef<string>('')
 
   const setAlertFromPayload = useCallback((data: ActiveAlertResponse | ActiveAlert | undefined | null) => {
     if (data == null || typeof data !== 'object') {
@@ -33,11 +45,20 @@ export function useAlerts() {
   const fetchAlert = useCallback(async () => {
     try {
       const res = await api.get<ActiveAlertResponse>('/alerts/active')
-      setAlertFromPayload(res?.data ?? null)
+      const data = res?.data ?? null
+      const key = alertPayloadKey(data)
+      if (key !== lastPayloadKeyRef.current) {
+        lastPayloadKeyRef.current = key
+        setAlertUpdatedAt(Date.now())
+      }
+      setAlertFromPayload(data)
       setError(null)
-      setAlertUpdatedAt(Date.now())
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to fetch alerts')
+      if (lastPayloadKeyRef.current !== 'none') {
+        lastPayloadKeyRef.current = 'none'
+        setAlertUpdatedAt(Date.now())
+      }
       setAlertFromPayload(null)
     } finally {
       setLoading(false)
@@ -52,8 +73,12 @@ export function useAlerts() {
       es.onmessage = (e) => {
         try {
           const data = JSON.parse(e.data) as ActiveAlertResponse | ActiveAlert
-          setAlertFromPayload(data)
-          setAlertUpdatedAt(Date.now())
+          const key = alertPayloadKey(data ?? null)
+          if (key !== lastPayloadKeyRef.current) {
+            lastPayloadKeyRef.current = key
+            setAlertFromPayload(data)
+            setAlertUpdatedAt(Date.now())
+          }
         } catch (_) {}
       }
       es.onerror = () => {
@@ -71,7 +96,7 @@ export function useAlerts() {
         sseRef.current = null
       }
     }
-  }, [fetchAlert, setAlertFromPayload])
+  }, [fetchAlert])
 
   useEffect(() => {
     const onVisibilityChange = () => {

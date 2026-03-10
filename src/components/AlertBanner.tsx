@@ -107,11 +107,11 @@ export function AlertBanner({
             </button>
             {expanded && (
               <ul className="alert-banner__list">
-                {list.map((a) => {
+                {list.map((a, i) => {
                   const { label, color } = getAlertTypeStyle(a.type)
                   const cityList = a.cities?.length < 5 ? a.cities.join(', ') : `${t('alertIn')} ${a.cities.length} ${t('locations')}`
                   return (
-                    <li key={a.type} className="alert-banner__type" style={{ ['--alert-type-color' as string]: color }}>
+                    <li key={`${a.type}-${i}-${a.cities?.join(',') ?? ''}`} className="alert-banner__type" style={{ ['--alert-type-color' as string]: color }}>
                       <span className="alert-banner__type-pill" style={{ backgroundColor: color }} />
                       <span className="alert-banner__type-label">{label}:</span>{' '}
                       <span className="alert-banner__type-cities">{cityList}</span>
