@@ -52,6 +52,17 @@ interface StoredPush {
 let alertPushLog: StoredPush[] = []
 let alertListeners: ((alert: ActiveAlertPayload | null) => void)[] = []
 
+/** Reset all state. For tests only. */
+export function _resetForTest(): void {
+  alertPushLog = []
+  alertListeners = []
+}
+
+/** Inject a push with a specific receivedAt. For tests only. */
+export function _pushForTest(type: string, cities: string[], receivedAt: number, instructions?: string): void {
+  alertPushLog.push({ type, cities, instructions, receivedAt })
+}
+
 // Dynamic import for CommonJS package (pikud-haoref-api)
 async function getPikudHaoref() {
   const mod = await import('pikud-haoref-api')

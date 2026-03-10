@@ -3,6 +3,7 @@
  */
 import type { Express } from 'express'
 import axios from 'axios'
+import { haversineMeters } from './geo'
 
 const OVERPASS_URLS = [
   'https://overpass-api.de/api/interpreter',
@@ -10,23 +11,6 @@ const OVERPASS_URLS = [
 ]
 const DEFAULT_RADIUS_M = 2000
 const MAX_SHELTERS = 10
-
-interface OverpassNode {
-  type: 'node'
-  id: number
-  lat: number
-  lon: number
-  tags?: Record<string, string>
-}
-
-interface OverpassWay {
-  type: 'way'
-  id: number
-  center?: { lat: number; lon: number }
-  lat?: number
-  lon?: number
-  tags?: Record<string, string>
-}
 
 interface OverpassElement {
   type: string
@@ -41,16 +25,6 @@ interface OverpassResult {
   elements?: OverpassElement[]
 }
 
-function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371000
-  const dLat = ((lat2 - lat1) * Math.PI) / 180
-  const dLon = ((lon2 - lon1) * Math.PI) / 180
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-  return R * c
-}
 
 function getLatLon(el: OverpassElement): { lat: number; lon: number } | null {
   if (el.lat != null && el.lon != null) return { lat: el.lat, lon: el.lon }
@@ -123,7 +97,7 @@ out;
 
   const withDistance = withCoords.map((s) => ({
     ...s,
-    distance: haversine(lat, lon, s.lat, s.lon),
+    distance: haversineMeters(lat, lon, s.lat, s.lon),
   }))
 
   withDistance.sort((a, b) => a.distance - b.distance)
@@ -138,7 +112,7 @@ function sampleRouteDense(routeCoords: number[][], intervalM = 200): number[][] 
     const [lng1, lat1] = routeCoords[i - 1]
     const [lng2, lat2] = routeCoords[i]
     if (Number.isFinite(lat1) && Number.isFinite(lng1) && Number.isFinite(lat2) && Number.isFinite(lng2)) {
-      totalM += haversine(lat1, lng1, lat2, lng2)
+      totalM += haversineMeters(lat1, lng1, lat2, lng2)
     }
   }
   const n = Math.max(routeCoords.length, Math.ceil(totalM / intervalM))
@@ -166,7 +140,7 @@ function distanceToRoute(lat: number, lon: number, routeCoords: number[][]): num
     const lng = c[0]
     const latP = c[1]
     if (Number.isFinite(lng) && Number.isFinite(latP)) {
-      const d = haversine(lat, lon, latP, lng)
+      const d = haversineMeters(lat, lon, latP, lng)
       if (d < min) min = d
     }
   }

@@ -11,24 +11,10 @@ export interface ActiveAlertResponse extends ActiveAlert {
   alerts?: ActiveAlert[]
 }
 
-export interface AlertHistoryEntry {
-  data: string
-  date: string
-  time: string
-  datetime: string
-}
-
 // Geographic
 export interface LatLng {
   lat: number
   lng: number
-}
-
-export interface AlertZonePolygon {
-  id: string
-  name: string
-  coordinates: [number, number][][]
-  alertCount?: number
 }
 
 /** Zone along a route with alert history score (from backend). */
@@ -53,7 +39,6 @@ export interface SafeRoute {
   safetyScore: number
   /** Alert risk % derived from zones along route (matches map polygons). */
   alertRiskInRoutePct?: number
-  safetyDetails?: { historicalDensity: number; activeProximity: number }
 }
 
 // Shelters

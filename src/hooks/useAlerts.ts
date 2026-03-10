@@ -1,17 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { ActiveAlert, ActiveAlertResponse } from '../types'
 import api from '../services/api'
-
-/** Stable key for alert payload so we only bump alertUpdatedAt when zones would change */
-function alertPayloadKey(data: ActiveAlertResponse | ActiveAlert | null): string {
-  if (data == null || typeof data !== 'object') return 'none'
-  if (data.type === 'none' || !(data.cities?.length ?? 0)) return 'none'
-  const list = 'alerts' in data && Array.isArray(data.alerts) && data.alerts.length > 0 ? data.alerts : [data]
-  return list
-    .map((a) => `${a.type}:${[...(a.cities ?? [])].sort().join(',')}`)
-    .sort()
-    .join('|')
-}
+import { alertPayloadKey } from '../utils/alertPayloadKey'
 
 export function useAlerts() {
   const [alert, setAlert] = useState<ActiveAlert | null>(null)

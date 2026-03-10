@@ -9,6 +9,7 @@ import { dirname, join } from 'path'
 import { getAlertHistory, getHeatmapData, getAlertHistorySummary, getAlertHistorySummaryBySlot } from './alertService'
 import { getActiveAlertSync, getActiveAlertsSync } from './alertService'
 import type { HeatmapPoint } from './alertService'
+import { haversineMeters } from './geo'
 
 const require = createRequire(import.meta.url)
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -261,16 +262,6 @@ const HEATMAP_RADIUS_M = 6000
 const EXPOSURE_SCALE = 0.04
 const ACTIVE_ZONE_CAP = 10
 
-function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371000
-  const dLat = ((lat2 - lat1) * Math.PI) / 180
-  const dLon = ((lon2 - lon1) * Math.PI) / 180
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-  return R * c
-}
 
 /** Sample points evenly along route (coordinates as [lng, lat][]). */
 function sampleRoutePoints(coords: number[][], n: number): Array<{ lat: number; lng: number }> {
@@ -549,10 +540,6 @@ function pointInPolygon(lat: number, lng: number, ring: [number, number][]): boo
     if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside
   }
   return inside
-}
-
-export function isInActiveAlertZone(lat: number, lng: number): boolean {
-  return getZoneInfo(lat, lng).inZone
 }
 
 /** Get zone info for a point: inZone, countdown (seconds), and location name (Hebrew + English). */
@@ -907,6 +894,7 @@ export function registerRouteRoutes(app: Express): void {
       const countByCity = summary?.countByLocation ?? new Map<string, number>()
       const maxAlerts = summary?.maxAlerts ?? 1
 
+      const heatmapPoints = await getHeatmapData().catch(() => [] as HeatmapPoint[])
       let activeRings: [number, number][][] = []
       try {
         activeRings = getActiveZoneRings()
