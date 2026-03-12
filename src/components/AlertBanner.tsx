@@ -124,6 +124,9 @@ export function AlertBanner({
                       <span className="alert-banner__type-pill" style={{ backgroundColor: color }} />
                       <span className="alert-banner__type-label">{label}:</span>{' '}
                       <span className="alert-banner__type-cities">{cityList}</span>
+                      {a.instructions && (
+                        <p className="alert-banner__type-instructions">{a.instructions}</p>
+                      )}
                     </li>
                   )
                 })}
@@ -134,9 +137,6 @@ export function AlertBanner({
           <h2 className="alert-banner__title">{titleSingle}</h2>
         )}
         {alert.instructions && !multiType && (
-          <p className="alert-banner__instructions">{alert.instructions}</p>
-        )}
-        {alert.instructions && multiType && expanded && (
           <p className="alert-banner__instructions">{alert.instructions}</p>
         )}
         {countdownSeconds != null && countdownSeconds > 0 && (

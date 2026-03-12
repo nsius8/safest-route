@@ -51,6 +51,7 @@ function isFeatureNearRoute(feature: GeoJSONFeature, routeCoords: number[][]): b
 export function ActiveAlertLayer({ active, routeCoordinates, lang = 'he', alertUpdatedAt = 0 }: { active: boolean; routeCoordinates?: number[][]; lang?: 'he' | 'en'; alertUpdatedAt?: number }) {
   const map = useMap()
   const layerRef = useRef<L.GeoJSON | null>(null)
+  const prevDataRef = useRef<string>('')
 
   useEffect(() => {
     if (!active) {
@@ -58,12 +59,28 @@ export function ActiveAlertLayer({ active, routeCoordinates, lang = 'he', alertU
         layerRef.current.remove()
         layerRef.current = null
       }
+      prevDataRef.current = ''
       return
     }
 
     let cancelled = false
     api.get<GeoJSONFC>('/alerts/active-zones', { params: { lang } }).then(({ data }) => {
-      if (cancelled || !data?.features?.length) return
+      if (cancelled) return
+      const dataKey = data?.features?.length ? JSON.stringify(data.features.map(f => f.properties?.name).sort()) : ''
+
+      if (!data?.features?.length) {
+        if (layerRef.current) {
+          layerRef.current.remove()
+          layerRef.current = null
+        }
+        prevDataRef.current = ''
+        return
+      }
+
+      // Skip re-render if zones haven't changed
+      if (dataKey === prevDataRef.current && layerRef.current) return
+      prevDataRef.current = dataKey
+
       if (layerRef.current) {
         layerRef.current.remove()
         layerRef.current = null

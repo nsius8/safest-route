@@ -45,9 +45,9 @@ export function useAlerts() {
       const key = alertPayloadKey(data)
       if (key !== lastPayloadKeyRef.current) {
         lastPayloadKeyRef.current = key
+        setAlertFromPayload(data)
         setAlertUpdatedAt(Date.now())
       }
-      setAlertFromPayload(data)
       setError(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to fetch alerts')

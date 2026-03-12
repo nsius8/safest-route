@@ -650,6 +650,12 @@ body[dir="rtl"] {
 .alert-banner__type-cities {
   color: rgba(255, 255, 255, 0.95);
 }
+.alert-banner__type-instructions {
+  margin: 4px 0 0 0;
+  font-size: 0.85em;
+  color: rgba(255, 255, 255, 0.8);
+  font-style: italic;
+}
 
 /* Active alert zone that crosses or is near the route – blink */
 .alert-zone-blink {
