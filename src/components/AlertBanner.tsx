@@ -30,10 +30,19 @@ interface AlertBannerProps {
   onShowShelters: () => void
 }
 
+// Lazily-created, reusable AudioContext for alert beep
+let _audioCtx: AudioContext | null = null
+function getAudioContext(): AudioContext {
+  if (_audioCtx && _audioCtx.state !== 'closed') return _audioCtx
+  _audioCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
+  return _audioCtx
+}
+
 // Minimal beep: use Web Audio for alert sound
 function playAlertSound() {
   try {
-    const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
+    const ctx = getAudioContext()
+    if (ctx.state === 'suspended') ctx.resume()
     const osc = ctx.createOscillator()
     const gain = ctx.createGain()
     osc.connect(gain)

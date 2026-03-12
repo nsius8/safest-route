@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import type { LatLng } from '../types'
 
 const GEO_OPTIONS: PositionOptions = {
@@ -7,10 +7,23 @@ const GEO_OPTIONS: PositionOptions = {
   maximumAge: 5000, // allow short cache so watch updates reasonably often when moving
 }
 
+const POSITION_THRESHOLD = 0.0001 // ~10 meters
+
 export function useLocation() {
   const [position, setPosition] = useState<LatLng | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const prevPosRef = useRef<LatLng | null>(null)
+
+  const updatePosition = useCallback((lat: number, lng: number) => {
+    const prev = prevPosRef.current
+    if (prev && Math.abs(prev.lat - lat) < POSITION_THRESHOLD && Math.abs(prev.lng - lng) < POSITION_THRESHOLD) {
+      return
+    }
+    const next = { lat, lng }
+    prevPosRef.current = next
+    setPosition(next)
+  }, [])
 
   const refresh = useCallback(() => {
     setLoading(true)
@@ -22,7 +35,7 @@ export function useLocation() {
     }
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+        updatePosition(pos.coords.latitude, pos.coords.longitude)
         setError(null)
         setLoading(false)
       },
@@ -32,7 +45,7 @@ export function useLocation() {
       },
       GEO_OPTIONS
     )
-  }, [])
+  }, [updatePosition])
 
   // Initial fetch + watch for movement so position updates as the user moves
   useEffect(() => {
@@ -43,7 +56,7 @@ export function useLocation() {
     }
     let watchId: number | null = null
     const onPosition = (pos: GeolocationPosition) => {
-      setPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+      updatePosition(pos.coords.latitude, pos.coords.longitude)
       setError(null)
       setLoading(false)
     }

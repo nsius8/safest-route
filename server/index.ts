@@ -1,5 +1,6 @@
 import 'dotenv/config'
 import path from 'path'
+import crypto from 'crypto'
 import { existsSync } from 'fs'
 import { fileURLToPath } from 'url'
 import express from 'express'
@@ -18,11 +19,24 @@ import { registerRouteRoutes, getActiveAlertZones, getZoneInfo } from './routeSe
 import { registerShelterRoutes } from './shelterService'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+function timingSafeCompare(a: string, b: string): boolean {
+  const bufA = Buffer.from(a)
+  const bufB = Buffer.from(b)
+  if (bufA.length !== bufB.length) {
+    crypto.timingSafeEqual(bufA, bufA) // constant-time even on length mismatch
+    return false
+  }
+  return crypto.timingSafeEqual(bufA, bufB)
+}
+
 const app = express()
 const PORT = process.env.PORT ?? 3001
 
-app.use(cors())
-app.use(express.json())
+app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }))
+app.use(express.json({ limit: '1mb' }))
+
+// TODO: add helmet for production security headers
 
 // Health
 app.get('/health', (_req, res) => {
@@ -50,7 +64,7 @@ app.post('/api/alerts/push', (req, res) => {
   }
   const auth = req.headers.authorization
   const token = typeof auth === 'string' && auth.startsWith('Bearer ') ? auth.slice(7) : req.headers['x-alert-push-secret']
-  if (token !== secret) {
+  if (typeof token !== 'string' || !timingSafeCompare(token, secret)) {
     res.status(401).json({ error: 'Invalid or missing secret' })
     return
   }
@@ -89,6 +103,7 @@ app.get('/api/alerts/history', async (req, res) => {
       maxAlerts: result.maxAlerts,
     })
   } catch (e) {
+    console.warn('Alert history endpoint error:', e)
     res.status(500).json({ error: 'Failed to fetch history' })
   }
 })
@@ -99,6 +114,7 @@ app.get('/api/alerts/heatmap', async (_req, res) => {
     const points = await getHeatmapData()
     res.json({ points })
   } catch (e) {
+    console.warn('Heatmap endpoint error:', e)
     res.status(500).json({ error: 'Failed to fetch heatmap' })
   }
 })
@@ -132,11 +148,18 @@ app.get('/events/alerts', (req, res) => {
   res.setHeader('Connection', 'keep-alive')
   res.flushHeaders()
 
+  const heartbeat = setInterval(() => {
+    res.write(': heartbeat\n\n')
+  }, 30_000)
+
   const unsubscribe = subscribeToAlerts((alert) => {
     res.write(`data: ${JSON.stringify(alert ?? { type: 'none', cities: [] })}\n\n`)
   })
 
-  req.on('close', () => unsubscribe())
+  req.on('close', () => {
+    clearInterval(heartbeat)
+    unsubscribe()
+  })
 })
 
 registerRouteRoutes(app)
@@ -194,7 +217,7 @@ function scheduleDailyHistoryRefresh(): void {
     }
   }
   setInterval(check, 60 * 60 * 1000)
-  check().catch(() => {})
+  check().catch((e) => console.warn('Daily history check error:', e))
 }
 
 app.listen(PORT, () => {

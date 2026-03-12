@@ -37,11 +37,16 @@ export function RoutePanel({ onRouteFound, onUseMyLocation, onToggleZonesVisibil
       setter([])
       return
     }
-    const lang = getLang()
-    const { data } = await api.get<{ suggestions: PlaceSuggestion[] }>('/cities/suggest', {
-      params: { q: q.trim(), limit: 12, lang },
-    })
-    setter(data.suggestions || [])
+    try {
+      const lang = getLang()
+      const { data } = await api.get<{ suggestions: PlaceSuggestion[] }>('/cities/suggest', {
+        params: { q: q.trim(), limit: 12, lang },
+      })
+      setter(data.suggestions || [])
+    } catch (e) {
+      console.error(e)
+      setter([])
+    }
   }, [])
 
   useEffect(() => {
@@ -167,7 +172,7 @@ export function RoutePanel({ onRouteFound, onUseMyLocation, onToggleZonesVisibil
                 return prev.map((r, i) => (i === 0 ? updated : r))
               })
             })
-            .catch(() => {})
+            .catch(e => console.error(e))
         }
       } else {
         setError('No route found.')

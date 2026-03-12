@@ -13,14 +13,6 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 })
 
-// Avoid "Uncaught (in promise) undefined" from unhandled rejections (e.g. in iframe/extension contexts)
-window.addEventListener('unhandledrejection', (event) => {
-  if (event.reason === undefined || (typeof event.reason === 'string' && event.reason === 'undefined')) {
-    event.preventDefault()
-    console.warn('[Safest Route] Suppressed unhandled promise rejection (undefined). This can happen in embedded/iframe contexts.')
-  }
-})
-
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ErrorBoundary>

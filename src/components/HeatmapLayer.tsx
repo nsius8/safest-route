@@ -32,7 +32,7 @@ export function HeatmapLayer() {
         circle.addTo(map)
         layerRef.current.push(circle)
       })
-    }).catch(() => {})
+    }).catch(e => console.error(e))
 
     return () => {
       cancelled = true

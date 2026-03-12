@@ -48,7 +48,7 @@ function App() {
   // Load alert history on site load and when language changes (drives heatmap + zone scores)
   useEffect(() => {
     const historyLang = getLang() === 'he' ? 'he' : 'en'
-    api.get('/alerts/history', { params: { lang: historyLang } }).catch(() => {})
+    api.get('/alerts/history', { params: { lang: historyLang } }).catch(e => console.error(e))
   }, [lang])
 
   const [showSheltersOnMap, setShowSheltersOnMap] = useState(false)

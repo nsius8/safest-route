@@ -6,7 +6,7 @@ import axios from 'axios'
 import { createRequire } from 'module'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
-import { getAlertHistory, getHeatmapData, getAlertHistorySummary, getAlertHistorySummaryBySlot } from './alertService'
+import { getHeatmapData, getAlertHistorySummary, getAlertHistorySummaryBySlot } from './alertService'
 import { getActiveAlertSync, getActiveAlertsSync } from './alertService'
 import type { HeatmapPoint } from './alertService'
 import { haversineMeters } from './geo'
@@ -67,6 +67,16 @@ function getNameToId(): Map<string, number> {
   return nameToId
 }
 
+const idToCityMap = new Map<number, CityRecord>()
+function getIdToCity(): Map<number, CityRecord> {
+  ensureZoneData()
+  if (idToCityMap.size > 0) return idToCityMap
+  for (const c of citiesList) {
+    if (c.id !== 0) idToCityMap.set(c.id, c)
+  }
+  return idToCityMap
+}
+
 /** Normalize for search: trim, lowercase (for Latin script). */
 function norm(s: string): string {
   return s.trim().toLowerCase()
@@ -104,59 +114,6 @@ function toGeoJSONRing(points: [number, number][]): [number, number][] {
 interface MultiPolygon {
   type: 'MultiPolygon'
   coordinates: [number, number][][][]
-}
-
-/** Build avoidance polygons: high-history zones (top 20%) + all active alert zones. */
-async function buildAvoidancePolygons(): Promise<MultiPolygon | null> {
-  ensureZoneData()
-  const n2id = getNameToId()
-  const rings: [number, number][][] = []
-
-  // Active alerts: avoid all mentioned cities
-  const active = getActiveAlertSync()
-  if (active?.cities?.length) {
-    for (const cityName of active.cities) {
-      const id = n2id.get(cityName)
-      if (id == null) continue
-      const key = String(id)
-      const raw = polygonsMap[key]
-      if (raw?.length) {
-        const ring = toGeoJSONRing(raw)
-        if (ring.length) rings.push(ring)
-      }
-    }
-  }
-
-  // History: count alerts per city (history "data" often contains city/area name)
-  const history = await getAlertHistory()
-  const countByCity = new Map<string, number>()
-  for (const h of history) {
-    const name = (h.data || '').trim()
-    if (!name) continue
-    countByCity.set(name, (countByCity.get(name) || 0) + 1)
-  }
-
-  // Top 20% by count
-  const sorted = [...countByCity.entries()].sort((a, b) => b[1] - a[1])
-  const topCount = Math.max(1, Math.ceil(sorted.length * 0.2))
-  const topNames = new Set(sorted.slice(0, topCount).map(([n]) => n))
-
-  for (const cityName of topNames) {
-    const id = n2id.get(cityName)
-    if (id == null) continue
-    const key = String(id)
-    const raw = polygonsMap[key]
-    if (raw?.length) {
-      const ring = toGeoJSONRing(raw)
-      if (ring.length) rings.push(ring)
-    }
-  }
-
-  if (rings.length === 0) return null
-  return {
-    type: 'MultiPolygon',
-    coordinates: rings.map((r) => [r]),
-  }
 }
 
 /** Call ORS directions with optional avoid_polygons. */
@@ -453,7 +410,8 @@ async function geocodeNominatim(query: string): Promise<[number, number] | null>
     const lng = parseFloat(r.lon)
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
     return [lat, lng]
-  } catch (_) {
+  } catch (e) {
+    console.warn('Nominatim geocode failed:', e instanceof Error ? e.message : e)
     return null
   }
 }
@@ -480,7 +438,8 @@ async function geocode(query: string): Promise<[number, number] | null> {
     const coords = feat?.geometry?.coordinates
     if (!coords || coords.length < 2) return null
     return [coords[1], coords[0]] // ORS returns [lng,lat], we use [lat,lng]
-  } catch (_) {
+  } catch (e) {
+    console.warn('ORS geocode failed:', e instanceof Error ? e.message : e)
     return null
   }
 }
@@ -501,10 +460,7 @@ export function getActiveAlertZones(lang: 'he' | 'en' = 'he'): GeoJSONFeatureCol
   const alerts = getActiveAlertsSync()
   if (!alerts.length) return null
   const n2id = getNameToId()
-  const idToCity = new Map<number, CityRecord>()
-  for (const c of citiesList) {
-    if (c.id !== 0) idToCity.set(c.id, c)
-  }
+  const idToCity = getIdToCity()
   const features: GeoJSONFeature[] = []
   for (const alert of alerts) {
     const alertType = alert.type
@@ -528,20 +484,6 @@ export function getActiveAlertZones(lang: 'he' | 'en' = 'he'): GeoJSONFeatureCol
   return { type: 'FeatureCollection', features }
 }
 
-/** Check if [lat, lng] is inside any active alert polygon. */
-function pointInPolygon(lat: number, lng: number, ring: [number, number][]): boolean {
-  let inside = false
-  const n = ring.length
-  for (let i = 0, j = n - 1; i < n; j = i++) {
-    const [xi, yi] = ring[i]
-    const [xj, yj] = ring[j]
-    const x = lng
-    const y = lat
-    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside
-  }
-  return inside
-}
-
 /** Get zone info for a point: inZone, countdown (seconds), and location name (Hebrew + English). */
 export function getZoneInfo(lat: number, lng: number): {
   inZone: boolean
@@ -553,17 +495,14 @@ export function getZoneInfo(lat: number, lng: number): {
   const active = getActiveAlertSync()
   if (!active?.cities?.length) return { inZone: false }
   const n2id = getNameToId()
-  const idToCity = new Map<number, CityRecord>()
-  for (const c of citiesList) {
-    if (c.id !== 0) idToCity.set(c.id, c)
-  }
+  const idToCity = getIdToCity()
   for (const cityName of active.cities) {
     const id = n2id.get(cityName)
     if (id == null) continue
     const raw = polygonsMap[String(id)]
     if (!raw?.length) continue
     const ring = raw.map(([la, ln]) => [ln, la] as [number, number])
-    if (pointInPolygon(lat, lng, ring)) {
+    if (pointInRing(lat, lng, ring)) {
       const city = idToCity.get(id)
       return {
         inZone: true,
@@ -634,7 +573,8 @@ async function suggestPlacesNominatim(
       if (out.length >= limit) break
     }
     return out
-  } catch (_) {
+  } catch (e) {
+    console.warn('Nominatim suggest failed:', e instanceof Error ? e.message : e)
     return []
   }
 }
@@ -675,7 +615,8 @@ async function suggestPlacesORS(
       if (out.length >= limit) break
     }
     return out
-  } catch (_) {
+  } catch (e) {
+    console.warn('ORS suggest failed:', e instanceof Error ? e.message : e)
     return []
   }
 }
@@ -736,16 +677,17 @@ export function registerRouteRoutes(app: Express): void {
       let fromCoords: [number, number] | null = null
       let toCoords: [number, number] | null = null
 
-      if (typeof from === 'object' && typeof from.lat === 'number' && typeof from.lng === 'number') {
-        fromCoords = [from.lat, from.lng]
-      } else if (fromStr) {
-        fromCoords = await geocode(fromStr)
-      }
-      if (typeof to === 'object' && typeof to.lat === 'number' && typeof to.lng === 'number') {
-        toCoords = [to.lat, to.lng]
-      } else if (toStr) {
-        toCoords = await geocode(toStr)
-      }
+      // Geocode from and to in parallel
+      const [fromResult, toResult] = await Promise.all([
+        typeof from === 'object' && typeof from.lat === 'number' && typeof from.lng === 'number'
+          ? Promise.resolve([from.lat, from.lng] as [number, number])
+          : fromStr ? geocode(fromStr) : Promise.resolve(null),
+        typeof to === 'object' && typeof to.lat === 'number' && typeof to.lng === 'number'
+          ? Promise.resolve([to.lat, to.lng] as [number, number])
+          : toStr ? geocode(toStr) : Promise.resolve(null),
+      ])
+      fromCoords = fromResult
+      toCoords = toResult
 
       if (!fromCoords || !toCoords) {
         res.status(400).json({ error: 'Could not resolve from or to location' })
@@ -810,12 +752,16 @@ export function registerRouteRoutes(app: Express): void {
       let activeRings: [number, number][][] = []
       try {
         activeRings = getActiveZoneRings()
-      } catch (_) {}
+      } catch (e) {
+        console.warn('Failed to get active zone rings:', e)
+      }
 
       let safetyScore = 50
       try {
         safetyScore = computeRouteSafetyScore(coords, heatmapPoints, activeRings)
-      } catch (_) {}
+      } catch (e) {
+        console.warn('Failed to compute safety score:', e)
+      }
 
       const zonesAlongRoute = getZonesNearRoute(coords, countByCity, maxAlerts, lang)
       // Alert risk % derived from same zone data as polygons (so single number matches map)
@@ -844,16 +790,17 @@ export function registerRouteRoutes(app: Express): void {
       let fromCoords: [number, number] | null = null
       let toCoords: [number, number] | null = null
 
-      if (typeof from === 'object' && typeof from.lat === 'number' && typeof from.lng === 'number') {
-        fromCoords = [from.lat, from.lng]
-      } else if (fromStr) {
-        fromCoords = await geocode(fromStr)
-      }
-      if (typeof to === 'object' && typeof to.lat === 'number' && typeof to.lng === 'number') {
-        toCoords = [to.lat, to.lng]
-      } else if (toStr) {
-        toCoords = await geocode(toStr)
-      }
+      // Geocode from and to in parallel
+      const [fromResult, toResult] = await Promise.all([
+        typeof from === 'object' && typeof from.lat === 'number' && typeof from.lng === 'number'
+          ? Promise.resolve([from.lat, from.lng] as [number, number])
+          : fromStr ? geocode(fromStr) : Promise.resolve(null),
+        typeof to === 'object' && typeof to.lat === 'number' && typeof to.lng === 'number'
+          ? Promise.resolve([to.lat, to.lng] as [number, number])
+          : toStr ? geocode(toStr) : Promise.resolve(null),
+      ])
+      fromCoords = fromResult
+      toCoords = toResult
 
       if (!fromCoords || !toCoords) {
         res.status(400).json({ error: 'Could not resolve from or to location' })
@@ -898,11 +845,15 @@ export function registerRouteRoutes(app: Express): void {
       let activeRings: [number, number][][] = []
       try {
         activeRings = getActiveZoneRings()
-      } catch (_) {}
+      } catch (e) {
+        console.warn('Failed to get active zone rings:', e)
+      }
       let safetyScore = 50
       try {
         safetyScore = computeRouteSafetyScore(firstCoords, heatmapPoints, activeRings)
-      } catch (_) {}
+      } catch (e) {
+        console.warn('Failed to compute safety score:', e)
+      }
       const zonesAlongRoute = getZonesNearRoute(firstCoords, countByCity, maxAlerts, lang)
       const alertRiskInRoutePct = zonesAlongRoute.length
         ? Math.round(100 * zonesAlongRoute.reduce((s, z) => s + z.score, 0) / zonesAlongRoute.length)

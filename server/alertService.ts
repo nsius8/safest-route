@@ -2,6 +2,9 @@
  * Alert service: polls OREF live API, caches alert history, exposes state for REST/SSE.
  */
 import axios from 'axios'
+import { createRequire } from 'module'
+import { fileURLToPath } from 'url'
+import { dirname, join } from 'path'
 
 const OREF_HISTORY_URL = 'https://alerts-history.oref.org.il/Shared/Ajax/GetAlarmsHistory.aspx'
 const HISTORY_MODE = 2
@@ -69,9 +72,14 @@ async function getPikudHaoref() {
   return mod.default ?? mod
 }
 
+const PUSH_LOG_MAX = 1000
+
 function pruneOldPushes(): void {
   const cutoff = Date.now() - ALERT_WINDOW_MS
   alertPushLog = alertPushLog.filter((p) => p.receivedAt >= cutoff)
+  if (alertPushLog.length > PUSH_LOG_MAX) {
+    alertPushLog = alertPushLog.slice(-PUSH_LOG_MAX)
+  }
 }
 
 /** Per-city latest mention: type, receivedAt and instructions from the most recent push that mentioned that city. */
@@ -211,7 +219,19 @@ export function startLiveAlertPolling(options?: { proxy?: string }) {
   poll()
 }
 
-// In-memory history cache (populated when frontend calls GET /api/alerts/history?lang=...)
+// In-memory history cache, keyed by lang (populated when frontend calls GET /api/alerts/history?lang=...)
+interface HistoryCacheEntry {
+  history: AlertHistoryEntryPayload[]
+  cacheTime: number
+  summaryCache: { countByLocation: Map<string, number>; maxAlerts: number } | null
+  bySlotCache: {
+    countByLocationBySlot: Map<string, Map<number, number>>
+    maxAlertsBySlot: Map<number, number>
+  } | null
+}
+const historyCacheByLang = new Map<string, HistoryCacheEntry>()
+
+// Convenience accessors for the most recently populated cache (used by heatmap/safety which are lang-agnostic)
 let historyCache: AlertHistoryEntryPayload[] = []
 let historyCacheTime = 0
 let historySummaryCache: { countByLocation: Map<string, number>; maxAlerts: number } | null = null
@@ -261,7 +281,7 @@ function getSlotFromEntry(entry: AlertHistoryEntryPayload): number | null {
 }
 
 /** Build all caches from a list of history entries (shared by OREF and CSV loader). */
-function buildCachesFromList(list: AlertHistoryEntryPayload[]): void {
+function buildCachesFromList(list: AlertHistoryEntryPayload[], lang?: HistoryLang): void {
   const countByLocation = new Map<string, number>()
   const countByLocationBySlot = new Map<string, Map<number, number>>()
   for (const h of list) {
@@ -287,6 +307,14 @@ function buildCachesFromList(list: AlertHistoryEntryPayload[]): void {
   historyCacheTime = Date.now()
   historySummaryCache = { countByLocation, maxAlerts }
   historyBySlotCache = { countByLocationBySlot, maxAlertsBySlot }
+  if (lang) {
+    historyCacheByLang.set(lang, {
+      history: list,
+      cacheTime: Date.now(),
+      summaryCache: { countByLocation, maxAlerts },
+      bySlotCache: { countByLocationBySlot, maxAlertsBySlot },
+    })
+  }
 }
 
 /** Parse israel-alerts-data CSV line; returns { data, date, time, datetime, category_desc } or null. */
@@ -359,7 +387,7 @@ async function tryLoadHistoryFromCsvUrl(url: string): Promise<boolean> {
     if (!data || typeof data !== 'string') return false
     const list = loadHistoryFromCsvText(data)
     if (list.length === 0) return false
-    buildCachesFromList(list)
+    buildCachesFromList(list, 'he')
     console.log('Alert history: loaded from CSV, entries:', list.length)
     return true
   } catch (e) {
@@ -387,11 +415,12 @@ export async function fetchAndCacheHistory(lang: HistoryLang): Promise<{
   maxAlerts: number
 }> {
   const now = Date.now()
-  if (historySummaryCache && now - historyCacheTime < HISTORY_CACHE_TTL_MS) {
+  const langEntry = historyCacheByLang.get(lang)
+  if (langEntry && langEntry.summaryCache && now - langEntry.cacheTime < HISTORY_CACHE_TTL_MS) {
     return {
-      history: historyCache,
-      countByLocation: Object.fromEntries(historySummaryCache.countByLocation),
-      maxAlerts: historySummaryCache.maxAlerts,
+      history: langEntry.history,
+      countByLocation: Object.fromEntries(langEntry.summaryCache.countByLocation),
+      maxAlerts: langEntry.summaryCache.maxAlerts,
     }
   }
 
@@ -421,7 +450,7 @@ export async function fetchAndCacheHistory(lang: HistoryLang): Promise<{
       const keys = typeof data === 'object' && data !== null ? Object.keys(data) : []
       console.warn('Alert history: no array in response. Type:', typeof data, 'Keys:', keys)
     }
-    buildCachesFromList(list)
+    buildCachesFromList(list, lang)
     return {
       history: historyCache,
       countByLocation: Object.fromEntries(historySummaryCache!.countByLocation),
@@ -442,6 +471,7 @@ export async function fetchAndCacheHistory(lang: HistoryLang): Promise<{
 /** Force the next fetchAndCacheHistory to refetch (e.g. for daily refresh). */
 export function invalidateHistoryCache(): void {
   historyCacheTime = 0
+  historyCacheByLang.clear()
 }
 
 /** Returns cached history (missile-only). Empty until fetchAndCacheHistory(lang) is called (e.g. on site load). */
@@ -474,6 +504,21 @@ export interface HeatmapPoint {
   weight: number
 }
 
+const _require = createRequire(import.meta.url)
+const _dirname = dirname(fileURLToPath(import.meta.url))
+let _citiesData: Array<{ value: string; name: string; name_en?: string; lat: number; lng: number }> | null = null
+
+function getCitiesData() {
+  if (!_citiesData) {
+    try {
+      _citiesData = _require(join(_dirname, '..', 'node_modules', 'pikud-haoref-api', 'cities.json'))
+    } catch {
+      _citiesData = []
+    }
+  }
+  return _citiesData!
+}
+
 let heatmapCache: HeatmapPoint[] = []
 let heatmapCacheTime = 0
 
@@ -483,12 +528,7 @@ export async function getHeatmapData(): Promise<HeatmapPoint[]> {
     return heatmapCache
   }
   try {
-    const { createRequire } = await import('module')
-    const { fileURLToPath } = await import('url')
-    const { dirname, join } = await import('path')
-    const __dirname = dirname(fileURLToPath(import.meta.url))
-    const require = createRequire(import.meta.url)
-    const cities = require(join(__dirname, '..', 'node_modules', 'pikud-haoref-api', 'cities.json')) as Array<{ value: string; name: string; name_en?: string; lat: number; lng: number }>
+    const cities = getCitiesData()
     const nameToCoord = new Map<string, { lat: number; lng: number }>()
     for (const c of cities || []) {
       if (c.lat == null || c.lng == null) continue

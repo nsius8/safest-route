@@ -30,15 +30,19 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
         }}>
           <h1 style={{ color: '#e74c3c', marginBottom: '1rem' }}>Something went wrong</h1>
           <p style={{ marginBottom: '0.5rem' }}>{this.state.error.message}</p>
-          <pre style={{
-            background: '#252525',
-            padding: '1rem',
-            overflow: 'auto',
-            fontSize: '0.875rem',
-            borderRadius: '8px',
-          }}>
-            {this.state.error.stack}
-          </pre>
+          {import.meta.env.DEV ? (
+            <pre style={{
+              background: '#252525',
+              padding: '1rem',
+              overflow: 'auto',
+              fontSize: '0.875rem',
+              borderRadius: '8px',
+            }}>
+              {this.state.error.stack}
+            </pre>
+          ) : (
+            <p style={{ color: '#999' }}>An unexpected error occurred. Please try again.</p>
+          )}
           <button
             type="button"
             onClick={() => this.setState({ hasError: false, error: undefined })}

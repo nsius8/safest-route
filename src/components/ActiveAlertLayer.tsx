@@ -92,7 +92,7 @@ export function ActiveAlertLayer({ active, routeCoordinates, lang = 'he', alertU
       })
       geo.addTo(map)
       layerRef.current = geo
-    }).catch(() => {})
+    }).catch(e => console.error(e))
 
     return () => {
       cancelled = true

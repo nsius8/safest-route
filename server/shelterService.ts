@@ -37,6 +37,11 @@ export async function findNearbyShelters(
   lon: number,
   radiusM: number = DEFAULT_RADIUS_M
 ): Promise<{ id: string; lat: number; lon: number; name?: string; distance: number }[]> {
+  if (!Number.isFinite(lat) || lat < -90 || lat > 90) return []
+  if (!Number.isFinite(lon) || lon < -180 || lon > 180) return []
+  if (!Number.isFinite(radiusM) || radiusM <= 0) radiusM = DEFAULT_RADIUS_M
+  radiusM = Math.min(radiusM, 10000)
+
   // Overpass: nodes only (faster); around(radius_m, lat, lon)
   const query = `
 [out:json][timeout:15][maxsize:1000000];
@@ -201,7 +206,9 @@ out;
         data = response.data
         break
       }
-    } catch (_) {}
+    } catch (e) {
+      console.warn('Overpass along-route query failed:', e instanceof Error ? e.message : e)
+    }
   }
 
   if (!data?.elements?.length) return []
@@ -233,7 +240,9 @@ export function registerShelterRoutes(app: Express): void {
     try {
       const lat = req.query.lat != null ? Number(req.query.lat) : NaN
       const lon = req.query.lon != null ? Number(req.query.lon) : (req.query.lng != null ? Number(req.query.lng) : NaN)
-      const radius = req.query.radius != null ? Number(req.query.radius) : DEFAULT_RADIUS_M
+      let radius = req.query.radius != null ? Number(req.query.radius) : DEFAULT_RADIUS_M
+      if (!Number.isFinite(radius) || radius <= 0) radius = DEFAULT_RADIUS_M
+      radius = Math.min(radius, 10000)
 
       if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
         res.status(400).json({ error: 'lat and lon (or lng) required' })

@@ -40,7 +40,6 @@ const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
 async function pushToServer(payload: { type: string; cities: string[]; instructions?: string } | null): Promise<void> {
   const key = payloadKey(payload)
   if (key === lastPushedKey) return
-  lastPushedKey = key
   const url = `${PUSH_URL?.replace(/\/$/, '')}/api/alerts/push`
   const body = payload ? payload : { type: 'none', cities: [] }
   for (let attempt = 1; attempt <= PUSH_MAX_RETRIES; attempt++) {
@@ -53,10 +52,15 @@ async function pushToServer(payload: { type: string; cities: string[]; instructi
         },
         body: JSON.stringify(body),
       })
-      if (!r.ok) {
-        console.warn('Push failed:', r.status, r.statusText)
+      if (r.ok) {
+        lastPushedKey = key
+        return
       }
-      return
+      console.warn('Push failed:', r.status, r.statusText)
+      // Non-retryable HTTP errors
+      if (r.status === 401 || r.status === 400) {
+        return
+      }
     } catch (e) {
       const err = e instanceof Error ? e.message : String(e)
       if (attempt === PUSH_MAX_RETRIES) {
